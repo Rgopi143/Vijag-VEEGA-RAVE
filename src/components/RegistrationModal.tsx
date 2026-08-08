@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -11,6 +11,9 @@ interface RegistrationModalProps {
   theme?: 'light' | 'dark';
 }
 
+// DEFAULT UPI ID (VPA) FOR RECEIVING PAYMENTS
+const DEFAULT_UPI_ID = "rgopinathreddyreddyvari38@okicici";
+
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
     fullName: '',
@@ -20,10 +23,30 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     paymentMethod: 'UPI'
   });
 
+  const upiId = DEFAULT_UPI_ID;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
+
+  // Calculate ticket price based on Single (₹499) or Couple (₹699)
+  const getAmount = () => {
+    return formData.numberOfPersons === 'Couple' ? 699 : 499;
+  };
+
+  // Generate UPI Deep Link for GPay / PhonePe / Paytm
+  const getUpiDeepLink = () => {
+    const amount = getAmount();
+    const note = encodeURIComponent(`VEEGA RAVE - ${formData.numberOfPersons} Pass (${formData.fullName})`);
+    const name = encodeURIComponent("VEEGA RAVE 2026");
+    return `upi://pay?pa=${upiId}&pn=${name}&am=${amount}&cu=INR&tn=${note}`;
+  };
+
+  // Generate QR Code URL
+  const getQrCodeUrl = () => {
+    const upiUrl = getUpiDeepLink();
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
+  };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -47,6 +70,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
     setIsSubmitting(true);
 
+    const amount = getAmount();
+
     try {
       await addDoc(collection(db, "registrations"), {
         fullName: formData.fullName.trim(),
@@ -54,6 +79,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         mobileNumber: formData.mobileNumber.trim(),
         numberOfPersons: formData.numberOfPersons,
         paymentMethod: formData.paymentMethod,
+        ticketAmount: amount,
+        upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
@@ -65,6 +92,13 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         origin: { y: 0.6 },
         colors: ['#ff0a1a', '#ffffff', '#ffd700']
       });
+
+      // IF UPI IS CHOSEN, AUTOMATICALLY TRIGGER UPI DEEP-LINK ON MOBILE
+      if (formData.paymentMethod === 'UPI') {
+        const deepLink = getUpiDeepLink();
+        window.location.href = deepLink;
+      }
+
     } catch (err: any) {
       console.error("Firestore save error:", err);
       setFirestoreError("Unable to connect to Firestore database. Please check connection and try again.");
@@ -199,7 +233,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.numberOfPersons && <span className="error-text">{errors.numberOfPersons}</span>}
               </div>
 
-              {/* Payment Method (UPI & Cash at Venue only) */}
+              {/* Payment Method (UPI & Cash at Venue) */}
               <div className="form-group">
                 <label className="form-label">
                   <CreditCard size={16} /> Which payment method do you prefer for your entry pass? <span className="req-star">*</span>
@@ -223,18 +257,31 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
               </div>
 
+              {/* Dynamic UPI Price & Info Banner */}
+              {formData.paymentMethod === 'UPI' && (
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Total Payable Amount:</span>
+                    <span style={{ fontSize: '1.25rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    ⚡ Clicking <strong>Submit & Pay via UPI</strong> will open GPay / PhonePe / Paytm directly on your phone.
+                  </div>
+                </div>
+              )}
+
               {/* Submit Button */}
               <div style={{ marginTop: '8px' }}>
                 <button type="submit" disabled={isSubmitting} className="submit-btn">
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Saving to Firestore...</span>
+                      <span>Saving & Redirecting...</span>
                     </>
                   ) : (
                     <>
                       <Send size={18} />
-                      <span>Submit Response</span>
+                      <span>{formData.paymentMethod === 'UPI' ? `Submit & Pay ₹${getAmount()} via UPI` : 'Submit Response'}</span>
                     </>
                   )}
                 </button>
@@ -242,15 +289,44 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </form>
           ) : (
-            /* Confirmation Pass View */
+            /* Confirmation Pass View with UPI Payment Details */
             <div className="confirmation-card">
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
               </div>
-              <h3 className="conf-title">Saved to Firestore!</h3>
+              <h3 className="conf-title">Registration Submitted!</h3>
               <p className="conf-desc">
-                A copy of your responses will be emailed to <strong>{formData.email}</strong>.
+                Your entry pass details have been saved successfully to Firestore.
               </p>
+
+              {/* If UPI option was selected, display QR code and Pay button */}
+              {formData.paymentMethod === 'UPI' && (
+                <div style={{ background: '#181820', border: '1.5px solid #ff0a1a', borderRadius: '20px', padding: '20px', margin: '16px 0 24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', fontWeight: 800, fontSize: '1.1rem' }}>
+                    <QrCode size={20} color="#ff0a1a" />
+                    <span>Scan & Pay ₹{getAmount()}</span>
+                  </div>
+
+                  <img 
+                    src={getQrCodeUrl()} 
+                    alt={`UPI QR Code for ₹${getAmount()}`}
+                    style={{ width: '180px', height: '180px', borderRadius: '12px', border: '4px solid #ffffff' }}
+                  />
+
+                  <div style={{ fontSize: '0.85rem', color: '#94a3b8', textAlign: 'center' }}>
+                    Pay to UPI ID: <strong style={{ color: '#ffffff' }}>{upiId}</strong>
+                  </div>
+
+                  <a 
+                    href={getUpiDeepLink()}
+                    className="submit-btn"
+                    style={{ textDecoration: 'none', width: '100%', marginTop: '4px' }}
+                  >
+                    <ExternalLink size={18} />
+                    <span>Pay ₹{getAmount()} via GPay / PhonePe / Paytm</span>
+                  </a>
+                </div>
+              )}
 
               <div className="receipt-summary">
                 <div className="receipt-row">
@@ -267,7 +343,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
                 <div className="receipt-row">
                   <span>Number of Persons:</span>
-                  <strong>{formData.numberOfPersons}</strong>
+                  <strong>{formData.numberOfPersons} (₹{getAmount()})</strong>
                 </div>
                 <div className="receipt-row">
                   <span>Payment Method:</span>
