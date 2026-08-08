@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, ExternalLink, Loader2, AlertCircle, Check } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -10,8 +10,6 @@ interface RegistrationModalProps {
   onClose: () => void;
   theme?: 'light' | 'dark';
 }
-
-const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScwOfwR7hWB1A_UBKbesq7f9TCZ7FH6p9GNCDPx0Vj8YU0clQ/viewform?usp=publish-editor";
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
@@ -69,7 +67,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       });
     } catch (err: any) {
       console.error("Firestore save error:", err);
-      setFirestoreError("Unable to connect to Firestore database directly. Please try again or use the Google Form.");
+      setFirestoreError("Unable to connect to Firestore database. Please check connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -225,8 +223,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
               </div>
 
-              {/* Submit Button & Direct Google Form Option */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+              {/* Submit Button */}
+              <div style={{ marginTop: '8px' }}>
                 <button type="submit" disabled={isSubmitting} className="submit-btn">
                   {isSubmitting ? (
                     <>
@@ -240,15 +238,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     </>
                   )}
                 </button>
-                
-                <a 
-                  href={GOOGLE_FORM_URL} 
-                  target="_self"
-                  className="google-form-link"
-                >
-                  <span>Or open original Google Form</span>
-                  <ExternalLink size={14} />
-                </a>
               </div>
 
             </form>
