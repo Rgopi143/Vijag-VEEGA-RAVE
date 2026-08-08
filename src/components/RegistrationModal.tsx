@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink, Copy, CheckCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -11,8 +11,9 @@ interface RegistrationModalProps {
   theme?: 'light' | 'dark';
 }
 
-// OFFICIAL VEEGA RAVE UPI ID (VPA) FOR RECEIVING PAYMENTS
+// OFFICIAL VEEGA RAVE UPI ID & PHONE NUMBER
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
+const PAYEE_MOBILE = "8249213853";
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
@@ -26,6 +27,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const upiId = DEFAULT_UPI_ID;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [copiedMobile, setCopiedMobile] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
@@ -34,18 +37,27 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return formData.numberOfPersons === 'Couple' ? 699 : 499;
   };
 
-  // Generate UPI Deep Link for GPay / PhonePe / Paytm
+  // Clean UPI Deep Link for GPay / PhonePe / Paytm (avoiding NPCI merchant flags)
   const getUpiDeepLink = () => {
     const amount = getAmount();
-    const note = encodeURIComponent(`VEEGA RAVE ${formData.numberOfPersons} Pass - ${formData.fullName}`);
-    const name = encodeURIComponent("VEEGA RAVE");
-    return `upi://pay?pa=${upiId}&pn=${name}&am=${amount}&cu=INR&tn=${note}`;
+    return `upi://pay?pa=${upiId}&am=${amount}&cu=INR`;
   };
 
   // Generate QR Code URL
   const getQrCodeUrl = () => {
     const upiUrl = getUpiDeepLink();
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
+  };
+
+  const copyToClipboard = (text: string, type: 'mobile' | 'upi') => {
+    navigator.clipboard.writeText(text);
+    if (type === 'mobile') {
+      setCopiedMobile(true);
+      setTimeout(() => setCopiedMobile(false), 2000);
+    } else {
+      setCopiedUpi(true);
+      setTimeout(() => setCopiedUpi(false), 2000);
+    }
   };
 
   const validate = () => {
@@ -74,7 +86,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     const deepLink = getUpiDeepLink();
 
     if (formData.paymentMethod === 'UPI') {
-      // Background non-blocking save to Firestore with 1.5s timeout safety
+      // Background non-blocking save to Firestore with 1.2s timeout safety
       try {
         const savePromise = addDoc(collection(db, "registrations"), {
           fullName: formData.fullName.trim(),
@@ -104,7 +116,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         colors: ['#ff0a1a', '#ffffff', '#ffd700']
       });
 
-      // INSTANTLY LAUNCH UPI APP (GPay / PhonePe / Paytm)
+      // LAUNCH CLEANED UPI DEEP LINK
       window.location.href = deepLink;
       return;
     }
@@ -280,15 +292,38 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
               </div>
 
-              {/* Dynamic UPI Price & Info Banner */}
+              {/* Dynamic UPI Price & Quick Copy Options */}
               {formData.paymentMethod === 'UPI' && (
-                <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Payable Amount to <strong>{upiId}</strong>:</span>
-                    <span style={{ fontSize: '1.25rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
+                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Total Payable Amount:</span>
+                    <span style={{ fontSize: '1.3rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                    ⚡ Clicking <strong>Pay ₹{getAmount()} via UPI App</strong> will launch GPay / PhonePe / Paytm directly on your phone with ₹{getAmount()} prefilled for <strong>{upiId}</strong>.
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                      <span style={{ color: '#94a3b8' }}>Payee Phone Number:</span>
+                      <button 
+                        type="button"
+                        onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
+                        style={{ background: 'none', border: 'none', color: '#ff0a1a', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <span>{PAYEE_MOBILE}</span>
+                        {copiedMobile ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                      <span style={{ color: '#94a3b8' }}>Payee UPI ID:</span>
+                      <button 
+                        type="button"
+                        onClick={() => copyToClipboard(UPI_ID_CLEAN(upiId), 'upi')}
+                        style={{ background: 'none', border: 'none', color: '#ffffff', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <span>{upiId}</span>
+                        {copiedUpi ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -312,7 +347,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </form>
           ) : (
-            /* Confirmation Pass View with UPI Payment Details */
+            /* Confirmation Pass View with UPI Payment Details & Mobile Number Option */
             <div className="confirmation-card">
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
@@ -322,7 +357,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 Your entry pass details have been saved successfully to Firestore.
               </p>
 
-              {/* If UPI option was selected, display QR code and Pay button */}
+              {/* If UPI option was selected, display QR code, Phone Number, and Pay button */}
               {formData.paymentMethod === 'UPI' && (
                 <div style={{ background: '#181820', border: '1.5px solid #ff0a1a', borderRadius: '20px', padding: '20px', margin: '16px 0 24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', fontWeight: 800, fontSize: '1.1rem' }}>
@@ -332,12 +367,25 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
                   <img 
                     src={getQrCodeUrl()} 
-                    alt={`UPI QR Code for ₹${getAmount()} to ${upiId}`}
+                    alt={`UPI QR Code for ₹${getAmount()}`}
                     style={{ width: '180px', height: '180px', borderRadius: '12px', border: '4px solid #ffffff' }}
                   />
 
-                  <div style={{ fontSize: '0.85rem', color: '#94a3b8', textAlign: 'center' }}>
-                    Pay to UPI ID: <strong style={{ color: '#ffffff' }}>{upiId}</strong>
+                  {/* Pay via Mobile Number Helper Box (Bypasses Paytm Protect alerts) */}
+                  <div style={{ width: '100%', background: 'rgba(255, 10, 26, 0.1)', border: '1px solid rgba(255, 10, 26, 0.3)', borderRadius: '12px', padding: '12px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '4px' }}>
+                      💡 If Paytm / PhonePe shows an alert, choose <strong>"Pay via Mobile Number"</strong> or <strong>"Pay via Scanning QR"</strong>:
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>{PAYEE_MOBILE}</span>
+                      <button 
+                        type="button" 
+                        onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
+                        style={{ padding: '4px 10px', borderRadius: '6px', background: '#ff0a1a', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {copiedMobile ? 'Copied!' : 'Copy Phone Number'}
+                      </button>
+                    </div>
                   </div>
 
                   <a 
@@ -385,4 +433,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       </div>
     </AnimatePresence>
   );
+}
+
+function UPI_ID_CLEAN(id: string) {
+  return id;
 }
