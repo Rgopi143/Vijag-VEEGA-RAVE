@@ -15,11 +15,10 @@ interface RegistrationModalProps {
 // OFFICIAL VEEGA RAVE UPI ID
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
 
-// Keywords for non-payment files (ID cards, posters, documents, certificates, personal photos)
-const NON_PAYMENT_KEYWORDS = [
-  'aadhar', 'adhar', 'pan', 'id', 'card', 'license', 'voter', 'passport',
-  'fellowship', 'project', 'poster', 'banner', 'flyer', 'certificate',
-  'resume', 'profile', 'avatar', 'cover', 'doc', 'pdf', 'image', 'photo', 'picture'
+// Explicit non-payment document keywords (Aadhar, PAN, Passport, Certificates)
+const STRICT_EXCLUDED_KEYWORDS = [
+  'aadhar', 'adhar', 'pan_card', 'voter_id', 'passport_doc', 'fellowship_poster',
+  'resume_doc', 'certificate_pdf'
 ];
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
@@ -107,54 +106,25 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
-  // Run Strict Payment Screenshot Receipt Verification
-  const verifyPaymentScreenshot = async (file: File, dataUrl: string) => {
+  // Verify Payment Screenshot Receipt
+  const verifyPaymentScreenshot = async (file: File) => {
     setIsVerifyingImage(true);
     setValidationError(null);
     setImageVerified(null);
 
     const fileNameLower = file.name.toLowerCase();
 
-    // 1. Check Non-Payment File Name Keywords (Aadhar, PAN, Card, ID, Poster, etc.)
-    const matchesNonPaymentKeyword = NON_PAYMENT_KEYWORDS.some(kw => {
-      if (kw === 'card' && fileNameLower.includes('score_card')) return true;
-      if (kw === 'id' && (fileNameLower.includes('paid') || fileNameLower.includes('paid_id'))) return false;
-      return fileNameLower.includes(kw);
-    });
+    // Check if filename contains explicit non-payment terms like aadhar, pan, resume
+    const isExplicitNonPayment = STRICT_EXCLUDED_KEYWORDS.some(kw => fileNameLower.includes(kw));
 
-    const isPaymentAppFileName = 
-      fileNameLower.includes('screenshot') ||
-      fileNameLower.includes('screen_shot') ||
-      fileNameLower.includes('gpay') ||
-      fileNameLower.includes('phonepe') ||
-      fileNameLower.includes('paytm') ||
-      fileNameLower.includes('bhim') ||
-      fileNameLower.includes('upi') ||
-      fileNameLower.includes('payment') ||
-      fileNameLower.includes('receipt');
-
-    if (matchesNonPaymentKeyword && !isPaymentAppFileName) {
+    if (isExplicitNonPayment) {
       setIsVerifyingImage(false);
       setImageVerified(false);
-      setValidationError(`❌ Invalid Image: "${file.name}" is an ID document/card or non-payment image! Please upload a valid PhonePe, GPay, or Paytm payment screenshot.`);
+      setValidationError(`❌ Invalid Image: "${file.name}" is an ID document or non-payment image! Please upload your payment screenshot.`);
       return false;
     }
 
-    // 2. Perform Image Aspect Ratio Inspection (Mobile screen screenshots vs flyers/IDs)
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise((resolve) => { img.onload = resolve; });
-
-    const aspectRatio = img.height / img.width;
-
-    if (aspectRatio < 1.15 && !isPaymentAppFileName) {
-      setIsVerifyingImage(false);
-      setImageVerified(false);
-      setValidationError(`❌ Invalid Image Format: Payment receipts must be portrait-mode mobile payment screenshots from PhonePe, GPay, or Paytm.`);
-      return false;
-    }
-
-    // Passed Verification Guards
+    // Accepts WhatsApp screenshots, PhonePe, GPay, Paytm, and standard image files
     setIsVerifyingImage(false);
     setImageVerified(true);
     return true;
@@ -171,7 +141,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       reader.onloadend = async () => {
         const resultStr = reader.result as string;
         setScreenshotPreview(resultStr);
-        await verifyPaymentScreenshot(file, resultStr);
+        await verifyPaymentScreenshot(file);
       };
       reader.readAsDataURL(file);
     }
