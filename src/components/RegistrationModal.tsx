@@ -18,7 +18,14 @@ const DEFAULT_UPI_ID = "8249213853-2@ibl";
 const VALID_PAYMENT_KEYWORDS = [
   'paid', 'payment', 'successful', 'success', 'completed', 'transfer',
   'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi', 'utr', 'ref',
-  'transaction', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
+  'transaction', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
+];
+
+// Keywords for non-payment files (ID cards, posters, documents, certificates, personal photos)
+const NON_PAYMENT_KEYWORDS = [
+  'aadhar', 'adhar', 'pan', 'id', 'card', 'license', 'voter', 'passport',
+  'fellowship', 'project', 'poster', 'banner', 'flyer', 'certificate',
+  'resume', 'profile', 'avatar', 'cover', 'doc', 'pdf', 'image', 'photo', 'picture'
 ];
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
@@ -106,7 +113,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `IMG_${Math.abs(hash)}_${file.size}`;
   };
 
-  // Run Smart OCR Payment Receipt Verification
+  // Run Strict Payment Screenshot Receipt Verification
   const verifyPaymentScreenshot = async (file: File, dataUrl: string) => {
     setIsVerifyingImage(true);
     setValidationError(null);
@@ -114,48 +121,65 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
     const fileNameLower = file.name.toLowerCase();
 
-    // 1. Check Explicit Non-Payment Poster / Document Names
-    const isExplicitNonPaymentDoc = 
-      fileNameLower.includes('project') ||
-      fileNameLower.includes('fellowship') ||
-      fileNameLower.includes('poster') ||
-      fileNameLower.includes('banner') ||
-      fileNameLower.includes('flyer') ||
-      fileNameLower.includes('document') ||
-      fileNameLower.includes('certificate') ||
-      fileNameLower.includes('resume');
+    // 1. Check Non-Payment File Name Keywords (Aadhar, PAN, Card, ID, Poster, etc.)
+    const matchesNonPaymentKeyword = NON_PAYMENT_KEYWORDS.some(kw => {
+      // Avoid false positive on screenshot or img
+      if (kw === 'card' && fileNameLower.includes('score_card')) return true;
+      if (kw === 'id' && (fileNameLower.includes('paid') || fileNameLower.includes('paid_id'))) return false;
+      return fileNameLower.includes(kw);
+    });
 
-    if (isExplicitNonPaymentDoc) {
+    // Check if filename explicitly looks like a payment receipt
+    const isPaymentAppFileName = 
+      fileNameLower.includes('screenshot') ||
+      fileNameLower.includes('screen_shot') ||
+      fileNameLower.includes('gpay') ||
+      fileNameLower.includes('phonepe') ||
+      fileNameLower.includes('paytm') ||
+      fileNameLower.includes('bhim') ||
+      fileNameLower.includes('upi') ||
+      fileNameLower.includes('payment') ||
+      fileNameLower.includes('receipt');
+
+    if (matchesNonPaymentKeyword && !isPaymentAppFileName) {
       setIsVerifyingImage(false);
       setImageVerified(false);
-      setValidationError(`❌ Invalid File: "${file.name}" is a poster/document, not a payment receipt! Please upload a real GPay, PhonePe, or Paytm payment screenshot.`);
+      setValidationError(`❌ Invalid Image: "${file.name}" is an ID document/card or non-payment image! Please upload a valid PhonePe, GPay, or Paytm payment screenshot.`);
       return false;
     }
 
-    // 2. Perform Image Aspect Ratio Inspection (Mobile screen screenshots vs flyers)
+    // 2. Perform Image Aspect Ratio Inspection (Mobile screen screenshots vs flyers/IDs)
     const img = new Image();
     img.src = dataUrl;
     await new Promise((resolve) => { img.onload = resolve; });
 
     const aspectRatio = img.height / img.width;
 
-    // Mobile payment receipts are vertical screenshots (height > width, ratio > 1.05)
-    if (aspectRatio < 1.05) {
+    // Mobile payment receipts are vertical screenshots (height > width, ratio > 1.25)
+    if (aspectRatio < 1.25 && !isPaymentAppFileName) {
       setIsVerifyingImage(false);
       setImageVerified(false);
-      setValidationError(`❌ Invalid Image Format: Payment screenshots must be portrait mode mobile screenshots from PhonePe, GPay, or Paytm.`);
+      setValidationError(`❌ Invalid Image Format: Payment receipts must be portrait-mode mobile payment screenshots from PhonePe, GPay, or Paytm.`);
       return false;
     }
 
-    // 3. Perform Tesseract.js OCR Text Extraction if available
+    // 3. Perform OCR Text Extraction via Tesseract.js if loaded
     try {
       if ((window as any).Tesseract) {
         const { data } = await (window as any).Tesseract.recognize(dataUrl, 'eng');
         const extractedText = (data.text || '').toLowerCase();
+
+        // Check if document contains Aadhar/PAN/ID terms
+        if (extractedText.includes('aadhar') || extractedText.includes('unique identification') || extractedText.includes('government of india') || extractedText.includes('income tax')) {
+          setIsVerifyingImage(false);
+          setImageVerified(false);
+          setValidationError(`❌ Invalid Document: Detected an ID Card / Government document ("${file.name}"). Please upload your UPI payment screenshot.`);
+          return false;
+        }
         
         const hasPaymentKeyword = VALID_PAYMENT_KEYWORDS.some(kw => extractedText.includes(kw));
 
-        if (!hasPaymentKeyword) {
+        if (!hasPaymentKeyword && !isPaymentAppFileName) {
           setIsVerifyingImage(false);
           setImageVerified(false);
           setValidationError(`❌ Verification Failed: Could not detect payment details (e.g. "Paid", "Success", "UPI Ref", "₹499/₹699") in "${file.name}". Please upload a clear GPay, PhonePe, or Paytm screenshot.`);
@@ -188,7 +212,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         const hash = generateImageHash(file, resultStr);
         setImageHash(hash);
 
-        // Run Verification
+        // Run Strict Verification
         await verifyPaymentScreenshot(file, resultStr);
       };
       reader.readAsDataURL(file);
