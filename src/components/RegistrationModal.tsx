@@ -105,7 +105,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
           <div className="modal-header">
             <div>
               <h2 className="modal-title">VEEGA RAVE</h2>
-              <p className="modal-subtitle">* Indicates required question</p>
             </div>
             <button type="button" onClick={onClose} className="modal-close-btn" aria-label="Close modal">
               <X size={20} />
