@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Clock, ArrowRight, ShieldCheck, Hash } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Clock, ArrowRight, ShieldCheck, Hash, Download } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import html2canvas from 'html2canvas';
 import { db } from '../firebase';
 import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 
@@ -31,9 +32,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   // Calculate ticket price based on Single (₹499) or Couple (₹699)
   const getAmount = () => {
@@ -46,10 +50,16 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `upi://pay?pa=${upiId}&am=${amount}&cu=INR`;
   };
 
-  // Generate High-Res QR Code URL
+  // Generate High-Res Payment QR Code URL
   const getQrCodeUrl = () => {
     const upiUrl = getUpiDeepLink();
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
+  };
+
+  // Generate Receipt QR Code URL based on UTR ID
+  const getUtrReceiptQrUrl = () => {
+    const dataString = `VEEGA_RAVE_TICKET|UTR:${formData.utrId || 'CACHE'}|NAME:${formData.fullName}|PASS:${formData.numberOfPersons}|AMT:${getAmount()}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(dataString)}`;
   };
 
   // 1-Minute Countdown Timer for QR Code Step
@@ -194,6 +204,32 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       setShowUtrStep(false);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // 1-Click Pass Receipt Image Download
+  const handleDownloadReceipt = async () => {
+    if (!receiptRef.current) return;
+    setIsDownloading(true);
+
+    try {
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 2,
+        backgroundColor: '#121218',
+        useCORS: true
+      });
+
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `VEEGA_RAVE_Pass_${formData.utrId || 'ENTRY'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Download receipt error:", err);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -477,55 +513,93 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </form>
           ) : (
-            /* STEP 4: Registration Confirmed Pass View */
+            /* STEP 4: Registration Confirmed Pass View with Ticket QR Code & Download Button */
             <div className="confirmation-card">
-              <div className="conf-icon">
-                <CheckCircle2 size={56} color="#ff0a1a" />
-              </div>
-              <h3 className="conf-title">Official Pass Issued!</h3>
-              <p className="conf-desc">
-                Your payment UTR ID has been verified against our database and your official entry pass has been issued!
-              </p>
+              
+              {/* Receipt Pass Container for Capture */}
+              <div ref={receiptRef} style={{ background: '#121218', padding: '16px', borderRadius: '20px', border: '1px solid rgba(255, 10, 26, 0.3)' }}>
+                <div className="conf-icon">
+                  <CheckCircle2 size={52} color="#ff0a1a" />
+                </div>
+                <h3 className="conf-title">Official Pass Issued!</h3>
+                <p className="conf-desc" style={{ marginBottom: '14px' }}>
+                  VEEGA RAVE Entry Pass
+                </p>
 
-              <div className="receipt-summary">
-                <div className="receipt-row">
-                  <span>Full Name:</span>
-                  <strong>{formData.fullName}</strong>
+                {/* Scannable Entry Pass QR Code Generated from UTR ID */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+                  <div style={{ background: '#ffffff', padding: '12px', borderRadius: '16px', border: '3px solid #ff0a1a', boxShadow: '0 10px 25px rgba(255, 10, 26, 0.3)' }}>
+                    <img 
+                      src={getUtrReceiptQrUrl()} 
+                      alt={`UTR Ticket QR for ${formData.utrId}`}
+                      style={{ width: '150px', height: '150px', display: 'block', borderRadius: '8px' }}
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#ff0a1a', fontWeight: 800, letterSpacing: '0.5px' }}>
+                    TICKET VERIFICATION QR (UTR: {formData.utrId})
+                  </span>
                 </div>
-                <div className="receipt-row">
-                  <span>E-Mail:</span>
-                  <strong>{formData.email}</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>Mobile Number:</span>
-                  <strong>{formData.mobileNumber}</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>Pass Type:</span>
-                  <strong>{formData.numberOfPersons} Pass (₹{getAmount()})</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>Payment Method:</span>
-                  <strong>{formData.paymentMethod}</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>UTR / Txn ID:</span>
-                  <strong style={{ color: '#ff0a1a' }}>{formData.utrId}</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>UTR Status:</span>
-                  <strong style={{ color: '#22c55e' }}>Verified Unique ✓</strong>
-                </div>
-                <div className="receipt-row">
-                  <span>Status:</span>
-                  <strong style={{ color: '#22c55e' }}>Pass Issued</strong>
+
+                <div className="receipt-summary">
+                  <div className="receipt-row">
+                    <span>Full Name:</span>
+                    <strong>{formData.fullName}</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>E-Mail:</span>
+                    <strong>{formData.email}</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>Mobile Number:</span>
+                    <strong>{formData.mobileNumber}</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>Pass Type:</span>
+                    <strong>{formData.numberOfPersons} Pass (₹{getAmount()})</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>Payment Method:</span>
+                    <strong>{formData.paymentMethod}</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>UTR / Txn ID:</span>
+                    <strong style={{ color: '#ff0a1a' }}>{formData.utrId}</strong>
+                  </div>
+                  <div className="receipt-row">
+                    <span>Status:</span>
+                    <strong style={{ color: '#22c55e' }}>Pass Issued ✓</strong>
+                  </div>
                 </div>
               </div>
 
-              <button type="button" onClick={handleReset} className="submit-btn">
-                <Sparkles size={18} />
-                <span>Done</span>
-              </button>
+              {/* Action Buttons: Download Receipt Pass + Done */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+                <button 
+                  type="button" 
+                  onClick={handleDownloadReceipt} 
+                  disabled={isDownloading}
+                  className="submit-btn"
+                  style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 10px 25px rgba(37, 99, 235, 0.4)' }}
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Downloading Pass...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={18} />
+                      <span>Download Receipt Pass</span>
+                    </>
+                  )}
+                </button>
+
+                <button type="button" onClick={handleReset} className="submit-btn">
+                  <Sparkles size={18} />
+                  <span>Done</span>
+                </button>
+              </div>
+
             </div>
           )}
 
