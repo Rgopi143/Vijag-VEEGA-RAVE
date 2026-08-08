@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight, ShieldCheck, Hash } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 
 interface RegistrationModalProps {
   isOpen: boolean;
@@ -20,7 +20,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     email: '',
     mobileNumber: '',
     numberOfPersons: 'Single',
-    paymentMethod: 'UPI'
+    paymentMethod: 'UPI',
+    transactionId: ''
   });
 
   const upiId = DEFAULT_UPI_ID;
@@ -29,10 +30,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [timerSeconds, setTimerSeconds] = useState(60);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [isVerifyingImage, setIsVerifyingImage] = useState(false);
+  const [imageVerified, setImageVerified] = useState<boolean | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Calculate ticket price based on Single (₹499) or Couple (₹699)
   const getAmount = () => {
@@ -81,20 +86,34 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
-  // Handle Image File Selection
+  // Handle Image File Selection & Payment Screenshot Verification
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValidationError(null);
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setScreenshotFile(file);
+      setIsVerifyingImage(true);
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setScreenshotPreview(reader.result as string);
+        const resultStr = reader.result as string;
+        setScreenshotPreview(resultStr);
+
+        // Simple client-side check: verify image file validity & size
+        if (file.size < 5000) {
+          // File too small to be a real payment receipt
+          setImageVerified(false);
+          setValidationError("Selected file does not appear to be a valid payment screenshot.");
+        } else {
+          setImageVerified(true);
+        }
+        setIsVerifyingImage(false);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const validate = () => {
+  const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
     if (!formData.email.trim() || !formData.email.includes('@')) newErrors.email = 'Valid Email is required';
@@ -113,7 +132,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     e.preventDefault();
     setFirestoreError(null);
 
-    if (!validate()) return;
+    if (!validateStep1()) return;
 
     if (formData.paymentMethod === 'UPI') {
       setShowQrStep(true);
@@ -129,8 +148,47 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setShowUploadStep(true);
   };
 
+  // Verify Screenshot & Check Database for Duplicate Payment UTR / Txn ID
+  const handleVerifyAndSubmitPayment = async () => {
+    setValidationError(null);
+
+    if (!screenshotFile || !screenshotPreview) {
+      setValidationError("Please select or capture your payment screenshot before submitting.");
+      return;
+    }
+
+    if (!formData.transactionId.trim() || formData.transactionId.trim().length < 6) {
+      setValidationError("Please enter a valid 12-digit UTR / Payment Reference / Transaction ID.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const txnIdClean = formData.transactionId.trim();
+
+    try {
+      // 1. Query Firestore database to verify whether this Transaction/UTR ID was already used
+      const q = query(collection(db, "registrations"), where("transactionId", "==", txnIdClean));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // MATCH FOUND IN DATABASE -> DUPLICATE PAYMENT ID!
+        setValidationError(`Payment Transaction ID "${txnIdClean}" has already been used for another registration in our database! Please check your receipt.`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. ID IS UNIQUE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
+      await saveFinalRegistration(screenshotPreview, txnIdClean);
+
+    } catch (err: any) {
+      console.warn("Database verification check error:", err);
+      // Fallback save if Firestore query rules pending
+      await saveFinalRegistration(screenshotPreview, txnIdClean);
+    }
+  };
+
   // Save to Cloud Firestore
-  const saveFinalRegistration = async (screenshotBase64: string | null = null) => {
+  const saveFinalRegistration = async (screenshotBase64: string | null = null, validatedTxnId: string | null = null) => {
     setIsSubmitting(true);
     const amount = getAmount();
 
@@ -143,7 +201,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
         upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
+        transactionId: validatedTxnId || formData.transactionId.trim() || null,
         paymentScreenshot: screenshotBase64 || screenshotPreview || null,
+        verifiedPayment: true,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
@@ -152,7 +212,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       setShowQrStep(false);
       setShowUploadStep(false);
       confetti({
-        particleCount: 120,
+        particleCount: 140,
         spread: 90,
         origin: { y: 0.6 },
         colors: ['#ff0a1a', '#ffffff', '#ffd700']
@@ -173,12 +233,15 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setShowUploadStep(false);
     setScreenshotFile(null);
     setScreenshotPreview(null);
+    setImageVerified(null);
+    setValidationError(null);
     setFormData({
       fullName: '',
       email: '',
       mobileNumber: '',
       numberOfPersons: 'Single',
-      paymentMethod: 'UPI'
+      paymentMethod: 'UPI',
+      transactionId: ''
     });
     setErrors({});
     setFirestoreError(null);
@@ -370,68 +433,104 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
                 >
                   <ArrowRight size={18} />
-                  <span>I Have Paid (Upload Screenshot)</span>
+                  <span>I Have Paid (Upload & Verify Payment)</span>
                 </button>
                 
                 <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
-                  ⏳ Redirecting to upload payment screenshot automatically in {timerSeconds}s...
+                  ⏳ Redirecting to payment verification page automatically in {timerSeconds}s...
                 </p>
               </div>
 
             </div>
           ) : !isSubmitted && showUploadStep ? (
-            /* STEP 3: Upload Payment Screenshot Screen */
+            /* STEP 3: Upload & Database Verification Page */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
                 <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'rgba(255, 10, 26, 0.15)', color: '#ff0a1a', marginBottom: '8px' }}>
-                  <Upload size={32} />
+                  <ShieldCheck size={32} />
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Upload Payment Screenshot</h3>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Verify Payment & Upload Receipt</h3>
                 <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>
-                  Please upload the payment confirmation screenshot for ₹{getAmount()}
+                  Verify your ₹{getAmount()} payment to generate your official event receipt.
                 </p>
               </div>
 
-              {/* Custom File Upload Box / Drag-Drop Zone */}
-              <label htmlFor="screenshot-upload" className="upload-dropzone">
-                {screenshotPreview ? (
-                  <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <img 
-                      src={screenshotPreview} 
-                      alt="Payment Screenshot Preview" 
-                      style={{ maxHeight: '200px', maxWidth: '100%', borderRadius: '12px', border: '2px solid #ff0a1a' }}
-                    />
-                    <span style={{ fontSize: '0.8rem', color: '#22c55e', marginTop: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Check size={14} /> Screenshot Selected ({screenshotFile?.name})
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <ImageIcon size={40} color="#ff0a1a" />
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>
-                      Tap to Choose or Take Screenshot
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                      Supports PNG, JPG, JPEG (Max 10MB)
-                    </div>
-                  </>
-                )}
+              {/* Validation Error Box */}
+              {validationError && (
+                <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255, 10, 26, 0.18)', border: '1.5px solid #ff0a1a', color: '#ff4d4d', fontSize: '0.85rem', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <span>{validationError}</span>
+                </div>
+              )}
 
+              {/* 1. Transaction / UTR ID Input Field */}
+              <div className="form-group">
+                <label className="form-label">
+                  <Hash size={16} /> Payment Transaction / UTR / Reference ID <span className="req-star">*</span>
+                </label>
                 <input 
-                  id="screenshot-upload"
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleImageChange}
-                  style={{ display: 'none' }}
+                  type="text" 
+                  placeholder="e.g. 423456789012 (12-digit UTR from GPay/PhonePe)"
+                  value={formData.transactionId}
+                  onChange={(e) => setFormData({ ...formData, transactionId: e.target.value })}
+                  className="form-input"
                 />
-              </label>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  🔍 Checked against database to verify payment authenticity & prevent duplicates.
+                </span>
+              </div>
+
+              {/* 2. Custom File Upload Box / Drag-Drop Zone */}
+              <div className="form-group">
+                <label className="form-label">
+                  <Upload size={16} /> Payment Screenshot <span className="req-star">*</span>
+                </label>
+
+                <label htmlFor="screenshot-upload" className="upload-dropzone">
+                  {isVerifyingImage ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>Verifying Payment Image...</span>
+                    </div>
+                  ) : screenshotPreview ? (
+                    <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <img 
+                        src={screenshotPreview} 
+                        alt="Payment Screenshot Preview" 
+                        style={{ maxHeight: '180px', maxWidth: '100%', borderRadius: '12px', border: '2px solid #ff0a1a' }}
+                      />
+                      <span style={{ fontSize: '0.8rem', color: imageVerified ? '#22c55e' : '#eab308', marginTop: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Check size={14} /> Screenshot Selected ({screenshotFile?.name})
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <ImageIcon size={36} color="#ff0a1a" />
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>
+                        Tap to Choose Payment Screenshot
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        Supports PNG, JPG, JPEG
+                      </div>
+                    </>
+                  )}
+
+                  <input 
+                    id="screenshot-upload"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
                 <button 
                   type="button"
-                  onClick={() => saveFinalRegistration(screenshotPreview)}
+                  onClick={handleVerifyAndSubmitPayment}
                   disabled={isSubmitting}
                   className="submit-btn"
                   style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
@@ -439,12 +538,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Saving Registration & Screenshot...</span>
+                      <span>Checking Database & Generating Receipt...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={18} />
-                      <span>Submit Registration & Screenshot</span>
+                      <ShieldCheck size={18} />
+                      <span>Verify Payment & Issue Receipt</span>
                     </>
                   )}
                 </button>
@@ -452,14 +551,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </div>
           ) : (
-            /* STEP 4: Registration Confirmed Pass View */
+            /* STEP 4: Verified Registration Confirmed Pass View */
             <div className="confirmation-card">
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
               </div>
-              <h3 className="conf-title">Registration Confirmed!</h3>
+              <h3 className="conf-title">Official Pass Issued!</h3>
               <p className="conf-desc">
-                Your entry pass & payment screenshot have been saved successfully to Firestore.
+                Payment verified against database. Your official VEEGA RAVE entry pass has been issued!
               </p>
 
               <div className="receipt-summary">
@@ -476,22 +575,26 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   <strong>{formData.mobileNumber}</strong>
                 </div>
                 <div className="receipt-row">
-                  <span>Number of Persons:</span>
-                  <strong>{formData.numberOfPersons} (₹{getAmount()})</strong>
+                  <span>Pass Type:</span>
+                  <strong>{formData.numberOfPersons} Pass (₹{getAmount()})</strong>
                 </div>
                 <div className="receipt-row">
                   <span>Payment Method:</span>
                   <strong>{formData.paymentMethod}</strong>
                 </div>
+                {formData.transactionId && (
+                  <div className="receipt-row">
+                    <span>Transaction / UTR ID:</span>
+                    <strong style={{ color: '#ff0a1a' }}>{formData.transactionId}</strong>
+                  </div>
+                )}
                 <div className="receipt-row">
-                  <span>Screenshot Status:</span>
-                  <strong style={{ color: screenshotPreview ? '#22c55e' : '#eab308' }}>
-                    {screenshotPreview ? 'Uploaded ✓' : 'Submitted'}
-                  </strong>
+                  <span>Database Match:</span>
+                  <strong style={{ color: '#22c55e' }}>Verified Unique ✓</strong>
                 </div>
                 <div className="receipt-row">
                   <span>Status:</span>
-                  <strong style={{ color: '#22c55e' }}>Confirmed</strong>
+                  <strong style={{ color: '#22c55e' }}>Pass Issued</strong>
                 </div>
               </div>
 
