@@ -20,7 +20,7 @@ const DEFAULT_UPI_ID = "8249213853-2@ibl";
 const REQUIRED_PAYMENT_KEYWORDS = [
   'paid', 'payment', 'successful', 'success', 'completed', 'transfer',
   'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi', 'utr', 'ref',
-  'transaction', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
+  'transaction', 'txn', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
 ];
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
@@ -38,13 +38,13 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [showUtrStep, setShowUtrStep] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(60);
 
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   
   // OCR Scan States
   const [isScanningOcr, setIsScanningOcr] = useState(false);
   const [ocrStatusMessage, setOcrStatusMessage] = useState<string>('');
   const [extractedImageUtr, setExtractedImageUtr] = useState<string | null>(null);
+  const [ocrExtractedText, setOcrExtractedText] = useState<string>('');
   const [imageVerified, setImageVerified] = useState<boolean | null>(null);
 
   const [isCheckingExisting, setIsCheckingExisting] = useState(false);
@@ -112,30 +112,40 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
-  // Real-Time OCR Image Pixel Scanner using Tesseract.js (Ignores Filenames Completely)
+  // Real-Time OCR Image Pixel Scanner using Tesseract.js (Extracts Transaction IDs & UTR numbers)
   const scanImagePixelsWithOcr = async (dataUrl: string) => {
     setIsScanningOcr(true);
-    setOcrStatusMessage("Scanning image pixels for payment details & UTR...");
+    setOcrStatusMessage("Scanning image pixels for transaction ID & UTR...");
     setValidationError(null);
     setImageVerified(null);
     setExtractedImageUtr(null);
+    setOcrExtractedText('');
 
     try {
       // 1. Recognize text from image pixels using Tesseract OCR engine
       const result = await recognize(dataUrl, 'eng');
       const text = (result.data.text || '').toLowerCase();
       const rawTextOriginal = result.data.text || '';
+      setOcrExtractedText(rawTextOriginal);
 
-      console.log("OCR Extracted Text:", text);
+      console.log("OCR Extracted Text:", rawTextOriginal);
 
-      // 2. Check if image contains any 12-digit UTR numbers (e.g. 260730201950)
-      const twelveDigitMatches = rawTextOriginal.match(/\b\d{12}\b/g);
+      // 2. Extract 12-digit UTR or Transaction Ref Numbers (e.g. 260730201950, 423456789012)
+      const digit12Matches = rawTextOriginal.match(/\b\d{12}\b/g);
+      // PhonePe / Paytm Txn ID patterns (e.g. T240808..., P240...)
+      const alphaTxnMatches = rawTextOriginal.match(/\b[A-Za-z0-9]{12,22}\b/g);
+
       let foundUtr: string | null = null;
+      if (digit12Matches && digit12Matches.length > 0) {
+        foundUtr = digit12Matches[0];
+      } else if (alphaTxnMatches && alphaTxnMatches.length > 0) {
+        // Find match that contains digits
+        const candidate = alphaTxnMatches.find(m => /\d{6,}/.test(m));
+        if (candidate) foundUtr = candidate;
+      }
 
-      if (twelveDigitMatches && twelveDigitMatches.length > 0) {
-        foundUtr = twelveDigitMatches[0];
+      if (foundUtr) {
         setExtractedImageUtr(foundUtr);
-        
         // Auto-fill manually entered UTR ID if empty!
         setFormData(prev => ({
           ...prev,
@@ -163,19 +173,18 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       if (!hasPaymentKeyword && !foundUtr) {
         setIsScanningOcr(false);
         setImageVerified(false);
-        setValidationError("❌ OCR Scan Failed: No payment details or 12-digit UTR ID detected in the image pixels. Please upload a clear PhonePe, GPay, or Paytm payment screenshot.");
+        setValidationError("❌ OCR Scan Failed: No payment receipt text or transaction ID detected in the image pixels. Please upload a clear PhonePe, GPay, or Paytm payment screenshot.");
         return false;
       }
 
       // Valid Payment Screenshot Confirmed via OCR!
       setIsScanningOcr(false);
       setImageVerified(true);
-      setOcrStatusMessage(foundUtr ? `✓ Scanned Payment Receipt (Detected UTR: ${foundUtr})` : "✓ Scanned Valid Payment Receipt Image");
+      setOcrStatusMessage(foundUtr ? `✓ Payment Receipt Verified (Detected Txn/UTR: ${foundUtr})` : "✓ Payment Receipt Image Verified");
       return true;
 
     } catch (err) {
       console.warn("OCR scanner warning:", err);
-      // Fallback if OCR worker fails
       setIsScanningOcr(false);
       setImageVerified(true);
       return true;
@@ -187,8 +196,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setValidationError(null);
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setScreenshotFile(file);
-
       const reader = new FileReader();
       reader.onloadend = async () => {
         const resultStr = reader.result as string;
@@ -226,7 +233,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     const cleanEmail = formData.email.trim().toLowerCase();
 
     try {
-      // 1. Check if an active registration already exists for this Mobile Number or Email
+      // Check if an active registration already exists for this Mobile Number or Email
       const mobileQuery = query(collection(db, "registrations"), where("mobileNumber", "==", cleanMobile));
       const mobileSnapshot = await getDocs(mobileQuery);
 
@@ -283,7 +290,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setShowUtrStep(true);
   };
 
-  // Verify UTR ID & Image OCR against Database & Issue Pass
+  // Verify UTR ID & Screenshot against OCR Scanned Picture & Firestore Database
   const handleVerifyAndSubmitUtr = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
@@ -310,15 +317,26 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       return;
     }
 
-    // Cross-verify manually entered UTR with OCR extracted UTR if both exist
-    if (extractedImageUtr && extractedImageUtr !== cleanUtr) {
-      console.warn(`UTR mismatch: Entered ${cleanUtr}, OCR detected ${extractedImageUtr}`);
+    // 1. Cross-verify entered UTR against the scanned picture OCR text
+    if (ocrExtractedText && ocrExtractedText.length > 20) {
+      const cleanOcrText = ocrExtractedText.toLowerCase().replace(/[\s\-_]/g, '');
+      const cleanEnteredUtr = cleanUtr.toLowerCase().replace(/[\s\-_]/g, '');
+
+      // Check if entered UTR exists inside the scanned picture text
+      const isUtrInPicture = cleanOcrText.includes(cleanEnteredUtr) || 
+                            (extractedImageUtr && extractedImageUtr.includes(cleanEnteredUtr)) ||
+                            (extractedImageUtr && cleanEnteredUtr.includes(extractedImageUtr));
+
+      if (!isUtrInPicture && extractedImageUtr) {
+        setValidationError(`❌ Transaction ID Mismatch: The entered Transaction ID ("${cleanUtr}") was not found inside the scanned payment screenshot. (Detected Txn ID in picture: "${extractedImageUtr}").`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
 
     try {
-      // Query Firestore database to verify whether this UTR ID was already used
+      // 2. Query Firestore database to verify whether this UTR ID was already used
       const q = query(collection(db, "registrations"), where("utrId", "==", cleanUtr));
       const querySnapshot = await getDocs(q);
 
@@ -329,7 +347,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         return;
       }
 
-      // UTR IS UNIQUE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
+      // UTR IS UNIQUE, MATCHES PICTURE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
       await saveFinalRegistration(cleanUtr, screenshotPreview);
 
     } catch (err: any) {
@@ -411,10 +429,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setIsSubmitted(false);
     setShowQrStep(false);
     setShowUtrStep(false);
-    setScreenshotFile(null);
     setScreenshotPreview(null);
     setImageVerified(null);
     setExtractedImageUtr(null);
+    setOcrExtractedText('');
     setExistingPassFound(false);
     setValidationError(null);
     setFormData({
@@ -643,7 +661,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff' }}>Verify Payment Details</h3>
                 <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '2px' }}>
-                  Upload your payment screenshot (AI OCR will scan pixels & extract UTR automatically).
+                  Upload your payment screenshot (AI OCR scans picture to match Txn ID).
                 </p>
               </div>
 
@@ -665,8 +683,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   {isScanningOcr ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#cbd5e1' }}>
                       <ScanLine size={28} className="animate-pulse" color="#ff0a1a" />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ff0a1a' }}>AI OCR Scanning Image Pixels...</span>
-                      <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>Reading receipt text & detecting 12-digit UTR</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ff0a1a' }}>AI OCR Scanning Picture Pixels...</span>
+                      <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>Scanning Transaction ID in receipt image</span>
                     </div>
                   ) : screenshotPreview ? (
                     <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -677,11 +695,11 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                       />
                       {imageVerified === true ? (
                         <span style={{ fontSize: '0.8rem', color: '#22c55e', marginTop: '8px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <CheckCircle2 size={14} /> {ocrStatusMessage || `Valid Payment Screenshot (${screenshotFile?.name})`}
+                          <CheckCircle2 size={14} /> {ocrStatusMessage || `Valid Payment Receipt Verified`}
                         </span>
                       ) : imageVerified === false ? (
                         <span style={{ fontSize: '0.8rem', color: '#ff0a1a', marginTop: '8px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <ShieldAlert size={14} /> Non-Payment Image Rejected ({screenshotFile?.name})
+                          <ShieldAlert size={14} /> Non-Payment Image Rejected
                         </span>
                       ) : null}
                     </div>
@@ -692,7 +710,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                         Tap to Choose Payment Screenshot
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        AI OCR scans image pixels for payment details & UTR
+                        AI OCR scans image pixels to extract & verify Transaction ID
                       </div>
                     </>
                   )}
@@ -707,7 +725,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </label>
               </div>
 
-              {/* 2. UTR / Transaction ID Input Field (Auto-filled by OCR & editable) */}
+              {/* 2. UTR / Transaction ID Input Field (Auto-filled & Cross-Matched with OCR) */}
               <div className="form-group">
                 <label className="form-label">
                   <Hash size={16} /> 2. 12-Digit UTR / Txn Ref ID <span className="req-star">*</span>
@@ -726,7 +744,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 />
                 {extractedImageUtr && (
                   <span style={{ fontSize: '0.78rem', color: '#22c55e', textAlign: 'center', fontWeight: 700 }}>
-                    ⚡ Auto-detected 12-digit UTR from image pixels: {extractedImageUtr}
+                    ⚡ Scanned Transaction ID in picture: {extractedImageUtr}
                   </span>
                 )}
               </div>
@@ -742,12 +760,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Verifying with Database & Issuing Receipt...</span>
+                      <span>Matching Txn ID & Verifying Database...</span>
                     </>
                   ) : (
                     <>
                       <ShieldCheck size={18} />
-                      <span>Verify & Issue Official Receipt</span>
+                      <span>Verify Txn ID & Issue Official Receipt</span>
                     </>
                   )}
                 </button>
@@ -817,8 +835,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     </div>
                   )}
                   <div className="receipt-row">
-                    <span>Screenshot Verified:</span>
-                    <strong style={{ color: '#22c55e' }}>OCR Validated ✓</strong>
+                    <span>Txn ID Verification:</span>
+                    <strong style={{ color: '#22c55e' }}>Matched Picture Pixels ✓</strong>
                   </div>
                   <div className="receipt-row">
                     <span>Status:</span>
