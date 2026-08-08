@@ -30,6 +30,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [showUtrStep, setShowUtrStep] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(60);
 
+  const [isCheckingExisting, setIsCheckingExisting] = useState(false);
+  const [existingPassFound, setExistingPassFound] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -58,7 +61,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
   // Generate Receipt QR Code URL based on UTR ID
   const getUtrReceiptQrUrl = () => {
-    const dataString = `VEEGA_RAVE_TICKET|UTR:${formData.utrId || 'CACHE'}|NAME:${formData.fullName}|PASS:${formData.numberOfPersons}|AMT:${getAmount()}`;
+    const dataString = `VEEGA_RAVE_TICKET|UTR:${formData.utrId || 'CONFIRMED'}|NAME:${formData.fullName}|PASS:${formData.numberOfPersons}|AMT:${getAmount()}`;
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(dataString)}`;
   };
 
@@ -106,13 +109,59 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return Object.keys(newErrors).length === 0;
   };
 
-  // Step 1 Submit: Proceed to QR Code payment
-  const handleProceedToPayment = (e: React.FormEvent) => {
+  // Step 1 Submit: Check for existing registration before proceeding
+  const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setFirestoreError(null);
+    setExistingPassFound(false);
 
     if (!validateStep1()) return;
 
+    setIsCheckingExisting(true);
+    const cleanMobile = formData.mobileNumber.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    try {
+      // 1. Check if an active registration already exists for this Mobile Number or Email
+      const mobileQuery = query(collection(db, "registrations"), where("mobileNumber", "==", cleanMobile));
+      const mobileSnapshot = await getDocs(mobileQuery);
+
+      let existingDocData: any = null;
+
+      if (!mobileSnapshot.empty) {
+        existingDocData = mobileSnapshot.docs[0].data();
+      } else {
+        const emailQuery = query(collection(db, "registrations"), where("email", "==", cleanEmail));
+        const emailSnapshot = await getDocs(emailQuery);
+        if (!emailSnapshot.empty) {
+          existingDocData = emailSnapshot.docs[0].data();
+        }
+      }
+
+      if (existingDocData) {
+        // EXISTING REGISTRATION PASS FOUND -> DISPLAY RECEIPT DIRECTLY!
+        setFormData({
+          fullName: existingDocData.fullName || formData.fullName,
+          email: existingDocData.email || formData.email,
+          mobileNumber: existingDocData.mobileNumber || formData.mobileNumber,
+          numberOfPersons: existingDocData.numberOfPersons || 'Single',
+          paymentMethod: existingDocData.paymentMethod || 'UPI',
+          utrId: existingDocData.utrId || 'CONFIRMED'
+        });
+        setExistingPassFound(true);
+        setIsSubmitted(true);
+        setShowQrStep(false);
+        setShowUtrStep(false);
+        setIsCheckingExisting(false);
+        return;
+      }
+    } catch (err) {
+      console.warn("Existing registration check error:", err);
+    } finally {
+      setIsCheckingExisting(false);
+    }
+
+    // No existing registration found -> Proceed with payment
     if (formData.paymentMethod === 'UPI') {
       setShowQrStep(true);
       setShowUtrStep(false);
@@ -147,7 +196,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setIsSubmitting(true);
 
     try {
-      // 1. Query Firestore database to verify whether this UTR ID was already used
+      // Query Firestore database to verify whether this UTR ID was already used
       const q = query(collection(db, "registrations"), where("utrId", "==", cleanUtr));
       const querySnapshot = await getDocs(q);
 
@@ -158,7 +207,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         return;
       }
 
-      // 2. UTR IS UNIQUE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
+      // UTR IS UNIQUE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
       await saveFinalRegistration(cleanUtr);
 
     } catch (err: any) {
@@ -237,6 +286,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setIsSubmitted(false);
     setShowQrStep(false);
     setShowUtrStep(false);
+    setExistingPassFound(false);
     setValidationError(null);
     setFormData({
       fullName: '',
@@ -390,9 +440,18 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
               {/* Submit Button */}
               <div style={{ marginTop: '8px' }}>
-                <button type="submit" className="submit-btn">
-                  <Send size={18} />
-                  <span>{formData.paymentMethod === 'UPI' ? `Get UPI QR Code (₹${getAmount()})` : 'Submit Registration'}</span>
+                <button type="submit" disabled={isCheckingExisting} className="submit-btn">
+                  {isCheckingExisting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Checking Registration Status...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} />
+                      <span>{formData.paymentMethod === 'UPI' ? `Get UPI QR Code (₹${getAmount()})` : 'Submit Registration'}</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -516,6 +575,13 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
             /* STEP 4: Registration Confirmed Pass View with Ticket QR Code & Download Button */
             <div className="confirmation-card">
               
+              {existingPassFound && (
+                <div style={{ padding: '10px 14px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.4)', color: '#22c55e', fontSize: '0.85rem', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={16} />
+                  <span>Existing Active Pass Found! (Already Registered)</span>
+                </div>
+              )}
+
               {/* Receipt Pass Container for Capture */}
               <div ref={receiptRef} style={{ background: '#121218', padding: '16px', borderRadius: '20px', border: '1px solid rgba(255, 10, 26, 0.3)' }}>
                 <div className="conf-icon">
@@ -536,7 +602,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     />
                   </div>
                   <span style={{ fontSize: '0.78rem', color: '#ff0a1a', fontWeight: 800, letterSpacing: '0.5px' }}>
-                    TICKET VERIFICATION QR (UTR: {formData.utrId})
+                    TICKET VERIFICATION QR (UTR: {formData.utrId || 'CONFIRMED'})
                   </span>
                 </div>
 
@@ -561,10 +627,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     <span>Payment Method:</span>
                     <strong>{formData.paymentMethod}</strong>
                   </div>
-                  <div className="receipt-row">
-                    <span>UTR / Txn ID:</span>
-                    <strong style={{ color: '#ff0a1a' }}>{formData.utrId}</strong>
-                  </div>
+                  {formData.utrId && (
+                    <div className="receipt-row">
+                      <span>UTR / Txn ID:</span>
+                      <strong style={{ color: '#ff0a1a' }}>{formData.utrId}</strong>
+                    </div>
+                  )}
                   <div className="receipt-row">
                     <span>Status:</span>
                     <strong style={{ color: '#22c55e' }}>Pass Issued ✓</strong>
