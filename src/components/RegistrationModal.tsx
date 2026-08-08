@@ -369,14 +369,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     </>
                   )}
                 </button>
-
-                <button 
-                  type="button" 
-                  onClick={() => setShowQrStep(false)}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  ← Back to Registration Form
-                </button>
               </div>
 
             </div>
