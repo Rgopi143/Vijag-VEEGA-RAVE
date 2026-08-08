@@ -199,14 +199,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.numberOfPersons && <span className="error-text">{errors.numberOfPersons}</span>}
               </div>
 
-              {/* Payment Method */}
+              {/* Payment Method (UPI & Cash at Venue only) */}
               <div className="form-group">
                 <label className="form-label">
                   <CreditCard size={16} /> Which payment method do you prefer for your entry pass? <span className="req-star">*</span>
                 </label>
 
                 <div className="radio-group">
-                  {['UPI', 'Credit/Debit Card', 'Net Banking', 'Cash at Venue'].map((method) => (
+                  {['UPI', 'Cash at Venue'].map((method) => (
                     <label key={method} className={`radio-card ${formData.paymentMethod === method ? 'radio-card-active' : ''}`}>
                       <input 
                         type="radio" 
