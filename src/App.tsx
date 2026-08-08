@@ -8,8 +8,8 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    // Default theme class
-    document.body.className = 'theme-light';
+    // Default dark theme for pitch black background
+    document.body.className = 'theme-dark';
   }, []);
 
   const handleButtonHover = () => {
@@ -27,7 +27,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-container theme-light">
+    <div className="app-container theme-dark">
       
       {/* Background Ambient Spotlight */}
       <div className="bg-spotlight">
@@ -76,7 +76,7 @@ export default function App() {
       <RegistrationModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        theme="light"
+        theme="dark"
       />
 
     </div>
