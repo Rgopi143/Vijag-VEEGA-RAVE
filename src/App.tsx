@@ -41,19 +41,21 @@ export default function App() {
             {/* Pulse Ring Animation Behind Button */}
             <div className="pulse-ring" />
 
-            {/* CENTERED INTERACTIVE "get Launch" BUTTON */}
-            <motion.a
-              href={GOOGLE_FORM_URL}
-              target="_self"
-              onMouseEnter={handleButtonHover}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-              className="btn-get-launch"
-            >
-              <Sparkles className="btn-icon" />
-              <span>get Launch</span>
-              <ExternalLink className="btn-icon" />
-            </motion.a>
+            {/* CENTERED INTERACTIVE "get Launch" BUTTON WRAPPER */}
+            <div className="btn-wrapper">
+              <motion.a
+                href={GOOGLE_FORM_URL}
+                target="_self"
+                onMouseEnter={handleButtonHover}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                className="btn-get-launch"
+              >
+                <Sparkles className="btn-icon" />
+                <span>get Launch</span>
+                <ExternalLink className="btn-icon" />
+              </motion.a>
+            </div>
           </div>
         </motion.div>
       </main>

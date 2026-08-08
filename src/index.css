@@ -82,8 +82,11 @@ html, body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 54%;
+  width: 52%;
+  max-width: 340px;
   height: 9.5%;
+  max-height: 66px;
+  min-height: 48px;
   border-radius: 50px;
   background-color: rgba(255, 10, 26, 0.5);
   pointer-events: none;
@@ -106,48 +109,51 @@ html, body {
   }
 }
 
-/* Interactive get Launch Button */
-.btn-get-launch {
+/* Button Centered Wrapper */
+.btn-wrapper {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
   width: 52%;
   max-width: 340px;
   height: 9.5%;
   max-height: 66px;
   min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* Interactive get Launch Button */
+.btn-get-launch {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   background: linear-gradient(135deg, #ff0a1a 0%, #d90412 100%) !important;
   color: #ffffff !important;
   font-family: 'Outfit', sans-serif !important;
-  font-size: clamp(1.15rem, 3.4vw, 1.7rem) !important;
+  font-size: clamp(1.1rem, 3.2vw, 1.65rem) !important;
   font-weight: 900 !important;
   text-decoration: none !important;
   border-radius: 50px !important;
   border: 3.5px solid #ffffff !important;
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 30px rgba(255, 10, 26, 0.85) !important;
   cursor: pointer;
-  z-index: 10;
   letter-spacing: 0.5px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: background 0.25s ease, box-shadow 0.25s ease;
 }
 
 .btn-get-launch:hover {
-  transform: translate(-50%, -50%) scale(1.08);
   background: linear-gradient(135deg, #ff2a38 0%, #ff0a1a 100%) !important;
   box-shadow: 0 16px 45px rgba(0, 0, 0, 0.8), 0 0 45px rgba(255, 10, 26, 1) !important;
   color: #ffffff !important;
   border-color: #ffffff !important;
-}
-
-.btn-get-launch:active {
-  transform: translate(-50%, -50%) scale(0.95);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6) !important;
 }
 
 .btn-icon {
