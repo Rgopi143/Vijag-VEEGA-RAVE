@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink, Copy, CheckCheck, Smartphone } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -13,7 +13,6 @@ interface RegistrationModalProps {
 
 // OFFICIAL VEEGA RAVE UPI ID & PHONE NUMBER
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
-const PAYEE_MOBILE = "8249213853";
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
@@ -28,8 +27,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [showQrStep, setShowQrStep] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [copiedMobile, setCopiedMobile] = useState(false);
-  const [copiedUpi, setCopiedUpi] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
@@ -48,17 +45,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const getQrCodeUrl = () => {
     const upiUrl = getUpiDeepLink();
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
-  };
-
-  const copyToClipboard = (text: string, type: 'mobile' | 'upi') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'mobile') {
-      setCopiedMobile(true);
-      setTimeout(() => setCopiedMobile(false), 2000);
-    } else {
-      setCopiedUpi(true);
-      setTimeout(() => setCopiedUpi(false), 2000);
-    }
   };
 
   const validate = () => {
@@ -287,8 +273,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </form>
           ) : !isSubmitted && showQrStep ? (
-            /* STEP 2: Dedicated UPI QR Code Payment Screen */
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center' }}>
+            /* STEP 2: Pure Clean High-Res QR Code Payment Screen */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center' }}>
               
               {/* Header Box */}
               <div style={{ background: 'rgba(255, 10, 26, 0.1)', border: '1px solid rgba(255, 10, 26, 0.3)', borderRadius: '16px', padding: '14px', width: '100%' }}>
@@ -301,7 +287,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 <img 
                   src={getQrCodeUrl()} 
                   alt={`UPI QR Code for ₹${getAmount()}`}
-                  style={{ width: '220px', height: '220px', display: 'block', borderRadius: '12px' }}
+                  style={{ width: '230px', height: '230px', display: 'block', borderRadius: '12px' }}
                 />
               </div>
 
@@ -310,46 +296,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 <span>Scan with GPay, PhonePe, Paytm or any UPI App</span>
               </div>
 
-              {/* Quick Copy Helpers for Phone Number & UPI ID */}
-              <div style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Smartphone size={14} color="#ff0a1a" /> Pay via Phone Number:
-                  </span>
-                  <button 
-                    type="button" 
-                    onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
-                    style={{ background: '#ff0a1a', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                  >
-                    <span>{PAYEE_MOBILE}</span>
-                    {copiedMobile ? <CheckCheck size={14} color="#ffffff" /> : <Copy size={14} />}
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: '#94a3b8' }}>UPI ID:</span>
-                  <button 
-                    type="button" 
-                    onClick={() => copyToClipboard(upiId, 'upi')}
-                    style={{ background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                  >
-                    <span>{upiId}</span>
-                    {copiedUpi ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
-                <a 
-                  href={getUpiDeepLink()}
-                  className="submit-btn"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <ExternalLink size={18} />
-                  <span>Open UPI App Directly</span>
-                </a>
-
+              {/* Green Submit Confirmation Button */}
+              <div style={{ width: '100%', marginTop: '6px' }}>
                 <button 
                   type="button"
                   onClick={saveFinalRegistration}
