@@ -37,7 +37,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   // Generate UPI Deep Link for GPay / PhonePe / Paytm
   const getUpiDeepLink = () => {
     const amount = getAmount();
-    const note = encodeURIComponent(`VEEGA RAVE - ${formData.numberOfPersons} Pass (${formData.fullName})`);
+    const note = encodeURIComponent(`VEEGA RAVE ${formData.numberOfPersons} Pass - ${formData.fullName}`);
     const name = encodeURIComponent("VEEGA RAVE");
     return `upi://pay?pa=${upiId}&pn=${name}&am=${amount}&cu=INR&tn=${note}`;
   };
@@ -71,7 +71,45 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setIsSubmitting(true);
 
     const amount = getAmount();
+    const deepLink = getUpiDeepLink();
 
+    if (formData.paymentMethod === 'UPI') {
+      // Background non-blocking save to Firestore with 1.5s timeout safety
+      try {
+        const savePromise = addDoc(collection(db, "registrations"), {
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          mobileNumber: formData.mobileNumber.trim(),
+          numberOfPersons: formData.numberOfPersons,
+          paymentMethod: formData.paymentMethod,
+          ticketAmount: amount,
+          upiIdUsed: upiId,
+          createdAt: serverTimestamp(),
+          submittedAt: new Date().toISOString()
+        });
+
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+        await Promise.race([savePromise, timeoutPromise]);
+      } catch (err) {
+        console.warn("Firestore save warning:", err);
+      }
+
+      setIsSubmitted(true);
+      setIsSubmitting(false);
+
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#ff0a1a', '#ffffff', '#ffd700']
+      });
+
+      // INSTANTLY LAUNCH UPI APP (GPay / PhonePe / Paytm)
+      window.location.href = deepLink;
+      return;
+    }
+
+    // Cash at Venue path
     try {
       await addDoc(collection(db, "registrations"), {
         fullName: formData.fullName.trim(),
@@ -80,28 +118,13 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         numberOfPersons: formData.numberOfPersons,
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
-        upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
-
       setIsSubmitted(true);
-      confetti({
-        particleCount: 100,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ['#ff0a1a', '#ffffff', '#ffd700']
-      });
-
-      // IF UPI IS CHOSEN, AUTOMATICALLY TRIGGER UPI DEEP-LINK ON MOBILE
-      if (formData.paymentMethod === 'UPI') {
-        const deepLink = getUpiDeepLink();
-        window.location.href = deepLink;
-      }
-
     } catch (err: any) {
       console.error("Firestore save error:", err);
-      setFirestoreError("Unable to connect to Firestore database. Please check connection and try again.");
+      setIsSubmitted(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -265,7 +288,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     <span style={{ fontSize: '1.25rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                    ⚡ Clicking <strong>Submit & Pay via UPI</strong> will open GPay / PhonePe / Paytm directly on your phone with ₹{getAmount()} prefilled for <strong>{upiId}</strong>.
+                    ⚡ Clicking <strong>Pay ₹{getAmount()} via UPI App</strong> will launch GPay / PhonePe / Paytm directly on your phone with ₹{getAmount()} prefilled for <strong>{upiId}</strong>.
                   </div>
                 </div>
               )}
@@ -276,12 +299,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Saving & Redirecting...</span>
+                      <span>Opening UPI App...</span>
                     </>
                   ) : (
                     <>
                       <Send size={18} />
-                      <span>{formData.paymentMethod === 'UPI' ? `Submit & Pay ₹${getAmount()} via UPI` : 'Submit Response'}</span>
+                      <span>{formData.paymentMethod === 'UPI' ? `Pay ₹${getAmount()} via UPI App` : 'Submit Response'}</span>
                     </>
                   )}
                 </button>
@@ -323,7 +346,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     style={{ textDecoration: 'none', width: '100%', marginTop: '4px' }}
                   >
                     <ExternalLink size={18} />
-                    <span>Pay ₹{getAmount()} to {upiId}</span>
+                    <span>Open GPay / PhonePe / Paytm (₹{getAmount()})</span>
                   </a>
                 </div>
               )}
