@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Clock, ArrowRight, ShieldCheck, Hash } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -14,39 +14,20 @@ interface RegistrationModalProps {
 // OFFICIAL VEEGA RAVE UPI ID
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
 
-// Keywords found on legitimate UPI payment receipts (GPay, PhonePe, Paytm, BHIM, etc.)
-const VALID_PAYMENT_KEYWORDS = [
-  'paid', 'payment', 'successful', 'success', 'completed', 'transfer',
-  'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi', 'utr', 'ref',
-  'transaction', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
-];
-
-// Keywords for non-payment files (ID cards, posters, documents, certificates, personal photos)
-const NON_PAYMENT_KEYWORDS = [
-  'aadhar', 'adhar', 'pan', 'id', 'card', 'license', 'voter', 'passport',
-  'fellowship', 'project', 'poster', 'banner', 'flyer', 'certificate',
-  'resume', 'profile', 'avatar', 'cover', 'doc', 'pdf', 'image', 'photo', 'picture'
-];
-
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     mobileNumber: '',
     numberOfPersons: 'Single',
-    paymentMethod: 'UPI'
+    paymentMethod: 'UPI',
+    utrId: ''
   });
 
   const upiId = DEFAULT_UPI_ID;
   const [showQrStep, setShowQrStep] = useState(false);
-  const [showUploadStep, setShowUploadStep] = useState(false);
+  const [showUtrStep, setShowUtrStep] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(60);
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-  const [imageHash, setImageHash] = useState<string | null>(null);
-  
-  const [isVerifyingImage, setIsVerifyingImage] = useState(false);
-  const [imageVerified, setImageVerified] = useState<boolean | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -74,15 +55,15 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   // 1-Minute Countdown Timer for QR Code Step
   useEffect(() => {
     let timer: any = null;
-    if (showQrStep && !showUploadStep && !isSubmitted) {
+    if (showQrStep && !showUtrStep && !isSubmitted) {
       setTimerSeconds(60);
       timer = setInterval(() => {
         setTimerSeconds((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            // 1 Minute Completed -> Automatically open Upload Screenshot page!
+            // 1 Minute Completed -> Automatically open Enter UTR page!
             setShowQrStep(false);
-            setShowUploadStep(true);
+            setShowUtrStep(true);
             return 0;
           }
           return prev - 1;
@@ -92,131 +73,13 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [showQrStep, showUploadStep, isSubmitted]);
+  }, [showQrStep, showUtrStep, isSubmitted]);
 
   // Format seconds into 0:59 display
   const formatTime = (secs: number) => {
     const minutes = Math.floor(secs / 60);
     const remainingSecs = secs % 60;
     return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
-  };
-
-  // Generate unique fingerprint hash of the image file
-  const generateImageHash = (file: File, dataUrl: string) => {
-    const str = `${file.name}-${file.size}-${dataUrl.slice(-100)}`;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return `IMG_${Math.abs(hash)}_${file.size}`;
-  };
-
-  // Run Strict Payment Screenshot Receipt Verification
-  const verifyPaymentScreenshot = async (file: File, dataUrl: string) => {
-    setIsVerifyingImage(true);
-    setValidationError(null);
-    setImageVerified(null);
-
-    const fileNameLower = file.name.toLowerCase();
-
-    // 1. Check Non-Payment File Name Keywords (Aadhar, PAN, Card, ID, Poster, etc.)
-    const matchesNonPaymentKeyword = NON_PAYMENT_KEYWORDS.some(kw => {
-      // Avoid false positive on screenshot or img
-      if (kw === 'card' && fileNameLower.includes('score_card')) return true;
-      if (kw === 'id' && (fileNameLower.includes('paid') || fileNameLower.includes('paid_id'))) return false;
-      return fileNameLower.includes(kw);
-    });
-
-    // Check if filename explicitly looks like a payment receipt
-    const isPaymentAppFileName = 
-      fileNameLower.includes('screenshot') ||
-      fileNameLower.includes('screen_shot') ||
-      fileNameLower.includes('gpay') ||
-      fileNameLower.includes('phonepe') ||
-      fileNameLower.includes('paytm') ||
-      fileNameLower.includes('bhim') ||
-      fileNameLower.includes('upi') ||
-      fileNameLower.includes('payment') ||
-      fileNameLower.includes('receipt');
-
-    if (matchesNonPaymentKeyword && !isPaymentAppFileName) {
-      setIsVerifyingImage(false);
-      setImageVerified(false);
-      setValidationError(`❌ Invalid Image: "${file.name}" is an ID document/card or non-payment image! Please upload a valid PhonePe, GPay, or Paytm payment screenshot.`);
-      return false;
-    }
-
-    // 2. Perform Image Aspect Ratio Inspection (Mobile screen screenshots vs flyers/IDs)
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise((resolve) => { img.onload = resolve; });
-
-    const aspectRatio = img.height / img.width;
-
-    // Mobile payment receipts are vertical screenshots (height > width, ratio > 1.25)
-    if (aspectRatio < 1.25 && !isPaymentAppFileName) {
-      setIsVerifyingImage(false);
-      setImageVerified(false);
-      setValidationError(`❌ Invalid Image Format: Payment receipts must be portrait-mode mobile payment screenshots from PhonePe, GPay, or Paytm.`);
-      return false;
-    }
-
-    // 3. Perform OCR Text Extraction via Tesseract.js if loaded
-    try {
-      if ((window as any).Tesseract) {
-        const { data } = await (window as any).Tesseract.recognize(dataUrl, 'eng');
-        const extractedText = (data.text || '').toLowerCase();
-
-        // Check if document contains Aadhar/PAN/ID terms
-        if (extractedText.includes('aadhar') || extractedText.includes('unique identification') || extractedText.includes('government of india') || extractedText.includes('income tax')) {
-          setIsVerifyingImage(false);
-          setImageVerified(false);
-          setValidationError(`❌ Invalid Document: Detected an ID Card / Government document ("${file.name}"). Please upload your UPI payment screenshot.`);
-          return false;
-        }
-        
-        const hasPaymentKeyword = VALID_PAYMENT_KEYWORDS.some(kw => extractedText.includes(kw));
-
-        if (!hasPaymentKeyword && !isPaymentAppFileName) {
-          setIsVerifyingImage(false);
-          setImageVerified(false);
-          setValidationError(`❌ Verification Failed: Could not detect payment details (e.g. "Paid", "Success", "UPI Ref", "₹499/₹699") in "${file.name}". Please upload a clear GPay, PhonePe, or Paytm screenshot.`);
-          return false;
-        }
-      }
-    } catch (e) {
-      console.warn("OCR recognition warning:", e);
-    }
-
-    // Passed All Verification Guards!
-    setIsVerifyingImage(false);
-    setImageVerified(true);
-    return true;
-  };
-
-  // Handle Image Selection
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValidationError(null);
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setScreenshotFile(file);
-
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const resultStr = reader.result as string;
-        setScreenshotPreview(resultStr);
-
-        // Generate Image Hash
-        const hash = generateImageHash(file, resultStr);
-        setImageHash(hash);
-
-        // Run Strict Verification
-        await verifyPaymentScreenshot(file, resultStr);
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const validateStep1 = () => {
@@ -242,59 +105,61 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
     if (formData.paymentMethod === 'UPI') {
       setShowQrStep(true);
-      setShowUploadStep(false);
+      setShowUtrStep(false);
     } else {
-      saveFinalRegistration(null, null);
+      saveFinalRegistration(null);
     }
   };
 
-  // Step 2 Proceed: Manually jump to upload screenshot step before timer ends
-  const handleProceedToUploadScreen = () => {
+  // Step 2 Proceed: Jump to UTR verification step before timer ends
+  const handleProceedToUtrScreen = () => {
     setShowQrStep(false);
-    setShowUploadStep(true);
+    setShowUtrStep(true);
   };
 
-  // Check Screenshot against Database & Issue Pass
-  const handleVerifyAndSubmitScreenshot = async () => {
+  // Verify UTR ID against Database & Issue Pass
+  const handleVerifyAndSubmitUtr = async (e: React.FormEvent) => {
+    e.preventDefault();
     setValidationError(null);
 
-    if (!screenshotFile || !screenshotPreview) {
-      setValidationError("Please select or capture your payment screenshot before submitting.");
+    const cleanUtr = formData.utrId.trim();
+
+    if (!cleanUtr) {
+      setValidationError("Please enter your 12-digit UTR / Payment Reference ID.");
       return;
     }
 
-    if (imageVerified === false) {
-      setValidationError("Uploaded image is invalid. Please select a valid GPay, PhonePe, or Paytm payment receipt screenshot.");
+    if (cleanUtr.length < 8) {
+      setValidationError("Please enter a valid 12-digit UTR / Payment Transaction ID.");
       return;
     }
 
     setIsSubmitting(true);
-    const hash = imageHash || generateImageHash(screenshotFile, screenshotPreview);
 
     try {
-      // 1. Query Firestore database to verify whether this exact screenshot hash was already uploaded
-      const q = query(collection(db, "registrations"), where("imageHash", "==", hash));
+      // 1. Query Firestore database to verify whether this UTR ID was already used
+      const q = query(collection(db, "registrations"), where("utrId", "==", cleanUtr));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // MATCH FOUND IN DATABASE -> DUPLICATE SCREENSHOT!
-        setValidationError("❌ Duplicate Alert: This payment screenshot has ALREADY been used for another registration in our database!");
+        // MATCH FOUND IN DATABASE -> DUPLICATE UTR ID!
+        setValidationError(`❌ Duplicate Alert: UTR / Payment ID "${cleanUtr}" has ALREADY been used for another registration in our database!`);
         setIsSubmitting(false);
         return;
       }
 
-      // 2. SCREENSHOT IS NEW, VALID & UNIQUE -> SAVE REGISTRATION & ISSUE RECEIPT!
-      await saveFinalRegistration(screenshotPreview, hash);
+      // 2. UTR IS UNIQUE & UNUSED -> SAVE REGISTRATION & ISSUE RECEIPT!
+      await saveFinalRegistration(cleanUtr);
 
     } catch (err: any) {
       console.warn("Database duplicate check warning:", err);
       // Fallback save
-      await saveFinalRegistration(screenshotPreview, hash);
+      await saveFinalRegistration(cleanUtr);
     }
   };
 
   // Save to Cloud Firestore
-  const saveFinalRegistration = async (screenshotBase64: string | null = null, hash: string | null = null) => {
+  const saveFinalRegistration = async (validatedUtr: string | null = null) => {
     setIsSubmitting(true);
     const amount = getAmount();
 
@@ -307,8 +172,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
         upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
-        imageHash: hash || null,
-        paymentScreenshot: screenshotBase64 || screenshotPreview || null,
+        utrId: validatedUtr || formData.utrId.trim() || null,
         verifiedPayment: true,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
@@ -316,7 +180,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
       setIsSubmitted(true);
       setShowQrStep(false);
-      setShowUploadStep(false);
+      setShowUtrStep(false);
       confetti({
         particleCount: 140,
         spread: 90,
@@ -327,7 +191,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       console.error("Firestore save error:", err);
       setIsSubmitted(true);
       setShowQrStep(false);
-      setShowUploadStep(false);
+      setShowUtrStep(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -336,18 +200,15 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const handleReset = () => {
     setIsSubmitted(false);
     setShowQrStep(false);
-    setShowUploadStep(false);
-    setScreenshotFile(null);
-    setScreenshotPreview(null);
-    setImageHash(null);
-    setImageVerified(null);
+    setShowUtrStep(false);
     setValidationError(null);
     setFormData({
       fullName: '',
       email: '',
       mobileNumber: '',
       numberOfPersons: 'Single',
-      paymentMethod: 'UPI'
+      paymentMethod: 'UPI',
+      utrId: ''
     });
     setErrors({});
     setFirestoreError(null);
@@ -376,7 +237,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
             </button>
           </div>
 
-          {!isSubmitted && !showQrStep && !showUploadStep ? (
+          {!isSubmitted && !showQrStep && !showUtrStep ? (
             /* STEP 1: Registration Form */
             <form onSubmit={handleProceedToPayment} className="modal-form">
               
@@ -500,7 +361,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               </div>
 
             </form>
-          ) : !isSubmitted && showQrStep && !showUploadStep ? (
+          ) : !isSubmitted && showQrStep && !showUtrStep ? (
             /* STEP 2: High-Res QR Code Screen with 1-Minute Live Timer */
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
               
@@ -534,114 +395,87 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               <div style={{ width: '100%', marginTop: '6px' }}>
                 <button 
                   type="button"
-                  onClick={handleProceedToUploadScreen}
+                  onClick={handleProceedToUtrScreen}
                   className="submit-btn"
                   style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
                 >
                   <ArrowRight size={18} />
-                  <span>I Have Paid (Upload Screenshot)</span>
+                  <span>I Have Paid (Enter UTR / Txn ID)</span>
                 </button>
                 
                 <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
-                  ⏳ Redirecting to upload payment screenshot automatically in {timerSeconds}s...
+                  ⏳ Redirecting to enter UTR / Payment ID automatically in {timerSeconds}s...
                 </p>
               </div>
 
             </div>
-          ) : !isSubmitted && showUploadStep ? (
-            /* STEP 3: Upload & Database Verification Page */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          ) : !isSubmitted && showUtrStep ? (
+            /* STEP 3: UTR / Payment Reference ID Verification Screen */
+            <form onSubmit={handleVerifyAndSubmitUtr} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
                 <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'rgba(255, 10, 26, 0.15)', color: '#ff0a1a', marginBottom: '8px' }}>
-                  <Upload size={32} />
+                  <Hash size={32} />
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Upload Payment Screenshot</h3>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Enter UTR / Transaction ID</h3>
                 <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>
-                  Upload your PhonePe, GPay, or Paytm payment screenshot for ₹{getAmount()} to issue your pass.
+                  Enter the 12-digit UTR / Payment Reference ID for your ₹{getAmount()} payment.
                 </p>
               </div>
 
               {/* Validation Error Box */}
               {validationError && (
                 <div style={{ padding: '12px 16px', borderRadius: '14px', backgroundColor: 'rgba(255, 10, 26, 0.2)', border: '1.5px solid #ff0a1a', color: '#ff4d4d', fontSize: '0.88rem', display: 'flex', alignItems: 'flex-start', gap: '10px', lineHeight: 1.4 }}>
-                  <ShieldAlert size={22} style={{ flexShrink: 0, marginTop: '2px', color: '#ff0a1a' }} />
+                  <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px', color: '#ff0a1a' }} />
                   <span>{validationError}</span>
                 </div>
               )}
 
-              {/* File Upload Dropzone */}
+              {/* UTR / Transaction ID Input Field */}
               <div className="form-group">
-                <label htmlFor="screenshot-upload" className="upload-dropzone">
-                  {isVerifyingImage ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
-                      <Loader2 size={24} className="animate-spin" color="#ff0a1a" />
-                      <span style={{ fontWeight: 600 }}>Analyzing Payment Receipt Image...</span>
-                    </div>
-                  ) : screenshotPreview ? (
-                    <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <img 
-                        src={screenshotPreview} 
-                        alt="Payment Screenshot Preview" 
-                        style={{ maxHeight: '200px', maxWidth: '100%', borderRadius: '12px', border: imageVerified ? '2px solid #22c55e' : '2px solid #ff0a1a' }}
-                      />
-                      
-                      {imageVerified === true ? (
-                        <span style={{ fontSize: '0.85rem', color: '#22c55e', marginTop: '10px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle2 size={16} /> Valid Payment Screenshot Detected ({screenshotFile?.name})
-                        </span>
-                      ) : imageVerified === false ? (
-                        <span style={{ fontSize: '0.85rem', color: '#ff0a1a', marginTop: '10px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <ShieldAlert size={16} /> Non-Payment Image Rejected ({screenshotFile?.name})
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <>
-                      <ImageIcon size={40} color="#ff0a1a" />
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>
-                        Tap to Choose Payment Screenshot
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        Upload screenshot from PhonePe, GPay, or Paytm
-                      </div>
-                    </>
-                  )}
-
-                  <input 
-                    id="screenshot-upload"
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleImageChange}
-                    style={{ display: 'none' }}
-                  />
+                <label className="form-label">
+                  <Hash size={16} /> 12-Digit UTR / Txn Ref ID <span className="req-star">*</span>
                 </label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. 423456789012 (12-digit UTR from GPay/PhonePe)"
+                  value={formData.utrId}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g, '').slice(0, 12);
+                    setFormData({ ...formData, utrId: cleaned });
+                  }}
+                  className="form-input"
+                  style={{ fontSize: '1.1rem', letterSpacing: '1px', fontWeight: 700, textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
+                  🔍 Checked against database to verify payment authenticity & prevent duplicates.
+                </span>
               </div>
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
                 <button 
-                  type="button"
-                  onClick={handleVerifyAndSubmitScreenshot}
-                  disabled={isSubmitting || !screenshotPreview || imageVerified === false}
+                  type="submit"
+                  disabled={isSubmitting || !formData.utrId.trim()}
                   className="submit-btn"
-                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)', opacity: (!screenshotPreview || isSubmitting || imageVerified === false) ? 0.5 : 1 }}
+                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)', opacity: (!formData.utrId.trim() || isSubmitting) ? 0.5 : 1 }}
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Verifying with Database & Issuing Receipt...</span>
+                      <span>Verifying UTR with Database & Issuing Receipt...</span>
                     </>
                   ) : (
                     <>
                       <ShieldCheck size={18} />
-                      <span>Verify Screenshot & Issue Receipt</span>
+                      <span>Verify UTR & Issue Receipt</span>
                     </>
                   )}
                 </button>
               </div>
 
-            </div>
+            </form>
           ) : (
             /* STEP 4: Registration Confirmed Pass View */
             <div className="confirmation-card">
@@ -650,7 +484,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               </div>
               <h3 className="conf-title">Official Pass Issued!</h3>
               <p className="conf-desc">
-                Your payment screenshot has been verified against our database and your official entry pass has been issued!
+                Your payment UTR ID has been verified against our database and your official entry pass has been issued!
               </p>
 
               <div className="receipt-summary">
@@ -675,8 +509,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   <strong>{formData.paymentMethod}</strong>
                 </div>
                 <div className="receipt-row">
-                  <span>Screenshot Verified:</span>
-                  <strong style={{ color: '#22c55e' }}>Valid Payment Receipt ✓</strong>
+                  <span>UTR / Txn ID:</span>
+                  <strong style={{ color: '#ff0a1a' }}>{formData.utrId}</strong>
+                </div>
+                <div className="receipt-row">
+                  <span>UTR Status:</span>
+                  <strong style={{ color: '#22c55e' }}>Verified Unique ✓</strong>
                 </div>
                 <div className="receipt-row">
                   <span>Status:</span>
