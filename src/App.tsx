@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
-
-const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScwOfwR7hWB1A_UBKbesq7f9TCZ7FH6p9GNCDPx0Vj8YU0clQ/viewform?usp=publish-editor";
+import RegistrationModal from './components/RegistrationModal';
 
 export default function App() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const handleButtonHover = () => {
     confetti({
       particleCount: 25,
@@ -12,6 +14,11 @@ export default function App() {
       origin: { y: 0.5 },
       colors: ['#ff0a1a', '#ffffff', '#ffd700']
     });
+  };
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsModalOpen(true);
   };
 
   return (
@@ -43,9 +50,9 @@ export default function App() {
 
             {/* CENTERED INTERACTIVE "get Launch" BUTTON WRAPPER */}
             <div className="btn-wrapper">
-              <motion.a
-                href={GOOGLE_FORM_URL}
-                target="_self"
+              <motion.button
+                type="button"
+                onClick={handleButtonClick}
                 onMouseEnter={handleButtonHover}
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
@@ -54,11 +61,17 @@ export default function App() {
                 <Sparkles className="btn-icon" />
                 <span>get Launch</span>
                 <ExternalLink className="btn-icon" />
-              </motion.a>
+              </motion.button>
             </div>
           </div>
         </motion.div>
       </main>
+
+      {/* Interactive Registration Modal with exact form fields */}
+      <RegistrationModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
 
     </div>
   );
