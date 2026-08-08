@@ -32,7 +32,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
     if (!formData.email.trim() || !formData.email.includes('@')) newErrors.email = 'Valid Email is required';
-    if (!formData.mobileNumber.trim() || formData.mobileNumber.length < 10) newErrors.mobileNumber = 'Valid 10-digit mobile number required';
+    if (!formData.mobileNumber.trim() || formData.mobileNumber.length !== 10) {
+      newErrors.mobileNumber = 'Mobile number must be exactly 10 digits';
+    }
     if (!formData.numberOfPersons) newErrors.numberOfPersons = 'Please select Single or Couple';
     if (!formData.paymentMethod) newErrors.paymentMethod = 'Please select a payment method';
 
@@ -154,16 +156,21 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
 
-              {/* Mobile Number */}
+              {/* Mobile Number (Strict 10 Digits) */}
               <div className="form-group">
                 <label className="form-label">
                   <Phone size={16} /> Mobile Number <span className="req-star">*</span>
                 </label>
                 <input 
                   type="tel" 
-                  placeholder="Enter 10-digit phone number" 
+                  maxLength={10}
+                  placeholder="Enter 10-digit mobile number" 
                   value={formData.mobileNumber}
-                  onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
+                  onChange={(e) => {
+                    // Only allow numbers and limit length to max 10 digits
+                    const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, mobileNumber: cleaned });
+                  }}
                   className={`form-input ${errors.mobileNumber ? 'input-error' : ''}`}
                 />
                 {errors.mobileNumber && <span className="error-text">{errors.mobileNumber}</span>}
