@@ -3,15 +3,15 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 
-// Your new web app's Firebase configuration
+// Read Firebase configuration safely from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCpa0Bg2gCWZ0IsNZSLx_b1VA7G31dlBJk",
-  authDomain: "rave-party-f2990.firebaseapp.com",
-  projectId: "rave-party-f2990",
-  storageBucket: "rave-party-f2990.firebasestorage.app",
-  messagingSenderId: "349275387713",
-  appId: "1:349275387713:web:a2ac6b913df9d83b8c53c0",
-  measurementId: "G-FSGV5VCMC9"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase App
