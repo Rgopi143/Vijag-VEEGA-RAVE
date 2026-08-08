@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, HelpCircle, ExternalLink, Loader2, AlertCircle, Check } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, ExternalLink, Loader2, AlertCircle, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -19,8 +19,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     email: '',
     mobileNumber: '',
     numberOfPersons: 'Single',
-    paymentMethod: 'UPI',
-    referralSource: ''
+    paymentMethod: 'UPI'
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +56,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         mobileNumber: formData.mobileNumber.trim(),
         numberOfPersons: formData.numberOfPersons,
         paymentMethod: formData.paymentMethod,
-        referralSource: formData.referralSource.trim(),
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
@@ -84,8 +82,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       email: '',
       mobileNumber: '',
       numberOfPersons: 'Single',
-      paymentMethod: 'UPI',
-      referralSource: ''
+      paymentMethod: 'UPI'
     });
     setErrors({});
     setFirestoreError(null);
@@ -167,7 +164,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   placeholder="Enter 10-digit mobile number" 
                   value={formData.mobileNumber}
                   onChange={(e) => {
-                    // Only allow numbers and limit length to max 10 digits
                     const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
                     setFormData({ ...formData, mobileNumber: cleaned });
                   }}
@@ -228,20 +224,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   ))}
                 </div>
                 {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
-              </div>
-
-              {/* Referral Source */}
-              <div className="form-group">
-                <label className="form-label">
-                  <HelpCircle size={16} /> How did you hear about the Veega Rave event?
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="Instagram, Friends, Poster, Cafe, etc." 
-                  value={formData.referralSource}
-                  onChange={(e) => setFormData({ ...formData, referralSource: e.target.value })}
-                  className="form-input"
-                />
               </div>
 
               {/* Submit Button & Direct Google Form Option */}
