@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /registrations/{document=**} {
+      // Allow public read access to verify active passes and prevent duplicate UTR submissions
+      allow read: if true;
+      
+      // Allow attendees to register and submit entry passes
+      allow create, update: if true;
+    }
+  }
+}
