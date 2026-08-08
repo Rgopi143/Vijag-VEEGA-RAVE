@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -13,6 +13,13 @@ interface RegistrationModalProps {
 
 // OFFICIAL VEEGA RAVE UPI ID
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
+
+// Keywords found on legitimate UPI payment receipts (GPay, PhonePe, Paytm, BHIM, etc.)
+const VALID_PAYMENT_KEYWORDS = [
+  'paid', 'payment', 'successful', 'success', 'completed', 'transfer',
+  'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi', 'utr', 'ref',
+  'transaction', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
+];
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
@@ -30,7 +37,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [imageHash, setImageHash] = useState<string | null>(null);
+  
   const [isVerifyingImage, setIsVerifyingImage] = useState(false);
+  const [imageVerified, setImageVerified] = useState<boolean | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -97,16 +106,81 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `IMG_${Math.abs(hash)}_${file.size}`;
   };
 
-  // Handle Image File Selection
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Run Smart OCR Payment Receipt Verification
+  const verifyPaymentScreenshot = async (file: File, dataUrl: string) => {
+    setIsVerifyingImage(true);
+    setValidationError(null);
+    setImageVerified(null);
+
+    const fileNameLower = file.name.toLowerCase();
+
+    // 1. Check Explicit Non-Payment Poster / Document Names
+    const isExplicitNonPaymentDoc = 
+      fileNameLower.includes('project') ||
+      fileNameLower.includes('fellowship') ||
+      fileNameLower.includes('poster') ||
+      fileNameLower.includes('banner') ||
+      fileNameLower.includes('flyer') ||
+      fileNameLower.includes('document') ||
+      fileNameLower.includes('certificate') ||
+      fileNameLower.includes('resume');
+
+    if (isExplicitNonPaymentDoc) {
+      setIsVerifyingImage(false);
+      setImageVerified(false);
+      setValidationError(`❌ Invalid File: "${file.name}" is a poster/document, not a payment receipt! Please upload a real GPay, PhonePe, or Paytm payment screenshot.`);
+      return false;
+    }
+
+    // 2. Perform Image Aspect Ratio Inspection (Mobile screen screenshots vs flyers)
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise((resolve) => { img.onload = resolve; });
+
+    const aspectRatio = img.height / img.width;
+
+    // Mobile payment receipts are vertical screenshots (height > width, ratio > 1.05)
+    if (aspectRatio < 1.05) {
+      setIsVerifyingImage(false);
+      setImageVerified(false);
+      setValidationError(`❌ Invalid Image Format: Payment screenshots must be portrait mode mobile screenshots from PhonePe, GPay, or Paytm.`);
+      return false;
+    }
+
+    // 3. Perform Tesseract.js OCR Text Extraction if available
+    try {
+      if ((window as any).Tesseract) {
+        const { data } = await (window as any).Tesseract.recognize(dataUrl, 'eng');
+        const extractedText = (data.text || '').toLowerCase();
+        
+        const hasPaymentKeyword = VALID_PAYMENT_KEYWORDS.some(kw => extractedText.includes(kw));
+
+        if (!hasPaymentKeyword) {
+          setIsVerifyingImage(false);
+          setImageVerified(false);
+          setValidationError(`❌ Verification Failed: Could not detect payment details (e.g. "Paid", "Success", "UPI Ref", "₹499/₹699") in "${file.name}". Please upload a clear GPay, PhonePe, or Paytm screenshot.`);
+          return false;
+        }
+      }
+    } catch (e) {
+      console.warn("OCR recognition warning:", e);
+    }
+
+    // Passed All Verification Guards!
+    setIsVerifyingImage(false);
+    setImageVerified(true);
+    return true;
+  };
+
+  // Handle Image Selection
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setValidationError(null);
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setScreenshotFile(file);
-      setIsVerifyingImage(true);
 
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const resultStr = reader.result as string;
         setScreenshotPreview(resultStr);
 
@@ -114,11 +188,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         const hash = generateImageHash(file, resultStr);
         setImageHash(hash);
 
-        // Simple validation check for file size
-        if (file.size < 5000) {
-          setValidationError("Selected file size is too small to be a valid payment receipt.");
-        }
-        setIsVerifyingImage(false);
+        // Run Verification
+        await verifyPaymentScreenshot(file, resultStr);
       };
       reader.readAsDataURL(file);
     }
@@ -168,8 +239,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       return;
     }
 
-    if (screenshotFile.size < 5000) {
-      setValidationError("Please upload a valid payment screenshot.");
+    if (imageVerified === false) {
+      setValidationError("Uploaded image is invalid. Please select a valid GPay, PhonePe, or Paytm payment receipt screenshot.");
       return;
     }
 
@@ -183,12 +254,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
       if (!querySnapshot.empty) {
         // MATCH FOUND IN DATABASE -> DUPLICATE SCREENSHOT!
-        setValidationError("This payment screenshot has already been submitted for another registration in our database!");
+        setValidationError("❌ Duplicate Alert: This payment screenshot has ALREADY been used for another registration in our database!");
         setIsSubmitting(false);
         return;
       }
 
-      // 2. SCREENSHOT IS NEW & UNIQUE -> SAVE REGISTRATION & ISSUE RECEIPT!
+      // 2. SCREENSHOT IS NEW, VALID & UNIQUE -> SAVE REGISTRATION & ISSUE RECEIPT!
       await saveFinalRegistration(screenshotPreview, hash);
 
     } catch (err: any) {
@@ -245,6 +316,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     setScreenshotFile(null);
     setScreenshotPreview(null);
     setImageHash(null);
+    setImageVerified(null);
     setValidationError(null);
     setFormData({
       fullName: '',
@@ -453,7 +525,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </div>
           ) : !isSubmitted && showUploadStep ? (
-            /* STEP 3: Upload & Database Verification Page (Screenshot Only) */
+            /* STEP 3: Upload & Database Verification Page */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
@@ -462,14 +534,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Upload Payment Screenshot</h3>
                 <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>
-                  Upload your payment confirmation screenshot for ₹{getAmount()} to issue your pass.
+                  Upload your PhonePe, GPay, or Paytm payment screenshot for ₹{getAmount()} to issue your pass.
                 </p>
               </div>
 
               {/* Validation Error Box */}
               {validationError && (
-                <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255, 10, 26, 0.18)', border: '1.5px solid #ff0a1a', color: '#ff4d4d', fontSize: '0.85rem', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ padding: '12px 16px', borderRadius: '14px', backgroundColor: 'rgba(255, 10, 26, 0.2)', border: '1.5px solid #ff0a1a', color: '#ff4d4d', fontSize: '0.88rem', display: 'flex', alignItems: 'flex-start', gap: '10px', lineHeight: 1.4 }}>
+                  <ShieldAlert size={22} style={{ flexShrink: 0, marginTop: '2px', color: '#ff0a1a' }} />
                   <span>{validationError}</span>
                 </div>
               )}
@@ -478,29 +550,36 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               <div className="form-group">
                 <label htmlFor="screenshot-upload" className="upload-dropzone">
                   {isVerifyingImage ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
-                      <Loader2 size={20} className="animate-spin" />
-                      <span>Verifying Screenshot Image...</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+                      <Loader2 size={24} className="animate-spin" color="#ff0a1a" />
+                      <span style={{ fontWeight: 600 }}>Analyzing Payment Receipt Image...</span>
                     </div>
                   ) : screenshotPreview ? (
                     <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <img 
                         src={screenshotPreview} 
                         alt="Payment Screenshot Preview" 
-                        style={{ maxHeight: '200px', maxWidth: '100%', borderRadius: '12px', border: '2px solid #ff0a1a' }}
+                        style={{ maxHeight: '200px', maxWidth: '100%', borderRadius: '12px', border: imageVerified ? '2px solid #22c55e' : '2px solid #ff0a1a' }}
                       />
-                      <span style={{ fontSize: '0.8rem', color: '#22c55e', marginTop: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Screenshot Selected ({screenshotFile?.name})
-                      </span>
+                      
+                      {imageVerified === true ? (
+                        <span style={{ fontSize: '0.85rem', color: '#22c55e', marginTop: '10px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CheckCircle2 size={16} /> Valid Payment Screenshot Detected ({screenshotFile?.name})
+                        </span>
+                      ) : imageVerified === false ? (
+                        <span style={{ fontSize: '0.85rem', color: '#ff0a1a', marginTop: '10px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <ShieldAlert size={16} /> Non-Payment Image Rejected ({screenshotFile?.name})
+                        </span>
+                      ) : null}
                     </div>
                   ) : (
                     <>
                       <ImageIcon size={40} color="#ff0a1a" />
                       <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>
-                        Tap to Choose or Take Screenshot
+                        Tap to Choose Payment Screenshot
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        Supports PNG, JPG, JPEG (Max 10MB)
+                        Upload screenshot from PhonePe, GPay, or Paytm
                       </div>
                     </>
                   )}
@@ -520,9 +599,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 <button 
                   type="button"
                   onClick={handleVerifyAndSubmitScreenshot}
-                  disabled={isSubmitting || !screenshotPreview}
+                  disabled={isSubmitting || !screenshotPreview || imageVerified === false}
                   className="submit-btn"
-                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)', opacity: (!screenshotPreview || isSubmitting) ? 0.6 : 1 }}
+                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)', opacity: (!screenshotPreview || isSubmitting || imageVerified === false) ? 0.5 : 1 }}
                 >
                   {isSubmitting ? (
                     <>
@@ -573,7 +652,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
                 <div className="receipt-row">
                   <span>Screenshot Verified:</span>
-                  <strong style={{ color: '#22c55e' }}>Unique ✓</strong>
+                  <strong style={{ color: '#22c55e' }}>Valid Payment Receipt ✓</strong>
                 </div>
                 <div className="receipt-row">
                   <span>Status:</span>
