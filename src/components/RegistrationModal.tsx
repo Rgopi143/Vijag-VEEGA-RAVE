@@ -8,11 +8,12 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 interface RegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  theme?: 'light' | 'dark';
 }
 
 const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScwOfwR7hWB1A_UBKbesq7f9TCZ7FH6p9GNCDPx0Vj8YU0clQ/viewform?usp=publish-editor";
 
-export default function RegistrationModal({ isOpen, onClose }: RegistrationModalProps) {
+export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -32,7 +33,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
     if (!formData.email.trim() || !formData.email.includes('@')) newErrors.email = 'Valid Email is required';
     if (!formData.mobileNumber.trim() || formData.mobileNumber.length < 10) newErrors.mobileNumber = 'Valid 10-digit mobile number required';
-    if (!formData.numberOfPersons || parseInt(formData.numberOfPersons) < 1) newErrors.numberOfPersons = 'Number of persons must be at least 1';
+    if (!formData.numberOfPersons || parseInt(formData.numberOfPersons, 10) < 1) newErrors.numberOfPersons = 'Number of persons must be at least 1';
     if (!formData.paymentMethod) newErrors.paymentMethod = 'Please select a payment method';
 
     setErrors(newErrors);
@@ -48,7 +49,6 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
     setIsSubmitting(true);
 
     try {
-      // Save entry to Cloud Firestore database under 'registrations' collection
       await addDoc(collection(db, "registrations"), {
         fullName: formData.fullName.trim(),
         email: formData.email.trim(),
@@ -69,7 +69,6 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
       });
     } catch (err: any) {
       console.error("Firestore save error:", err);
-      // Even if offline/rules block, present smooth fallback
       setFirestoreError("Unable to connect to Firestore database directly. Please try again or use the Google Form.");
     } finally {
       setIsSubmitting(false);
@@ -95,7 +94,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
 
   return (
     <AnimatePresence>
-      <div className="modal-overlay">
+      <div className={`modal-overlay ${theme === 'light' ? 'theme-light' : 'theme-dark'}`}>
         <motion.div 
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -119,7 +118,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
               
               {/* Firestore Status / Error Banner */}
               {firestoreError && (
-                <div className="p-3 bg-red-500/15 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-400 text-xs">
+                <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255, 10, 26, 0.15)', border: '1px solid rgba(255, 10, 26, 0.3)', color: '#ff0a1a', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <AlertCircle size={16} />
                   <span>{firestoreError}</span>
                 </div>
@@ -127,7 +126,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
 
               {/* Email Record Banner */}
               <div className="account-banner">
-                <Mail size={16} className="text-[#ff0a1a]" />
+                <Mail size={16} style={{ color: '#ff0a1a' }} />
                 <span>Record <strong>{formData.email || 'rgopinathreddyreddyvari38@gmail.com'}</strong> as the email to be included with response.</span>
               </div>
 
@@ -231,7 +230,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
               </div>
 
               {/* Submit Button & Direct Google Form Option */}
-              <div className="flex flex-col gap-2 mt-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
                 <button type="submit" disabled={isSubmitting} className="submit-btn">
                   {isSubmitting ? (
                     <>
@@ -241,7 +240,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
                   ) : (
                     <>
                       <Send size={18} />
-                      <span>Submit to Firestore</span>
+                      <span>Submit Response</span>
                     </>
                   )}
                 </button>
@@ -249,7 +248,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
                 <a 
                   href={GOOGLE_FORM_URL} 
                   target="_self"
-                  className="text-[#94a3b8] text-xs text-center no-underline flex items-center justify-center gap-1 mt-2 hover:underline"
+                  className="google-form-link"
                 >
                   <span>Or open original Google Form</span>
                   <ExternalLink size={14} />
