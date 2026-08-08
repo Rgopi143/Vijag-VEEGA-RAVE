@@ -13,8 +13,9 @@ interface RegistrationModalProps {
   theme?: 'light' | 'dark';
 }
 
-// OFFICIAL VEEGA RAVE UPI ID
+// OFFICIAL VEEGA RAVE UPI ID & PAYEE NAME
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
+const OFFICIAL_PAYEE_NAME = "Simhadri prudhviraj";
 
 // Essential keywords required in payment receipt image pixels
 const REQUIRED_PAYMENT_KEYWORDS = [
@@ -112,10 +113,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
-  // Real-Time OCR Image Pixel Scanner (Scans picture text & extracts UTR for comparison)
+  // Real-Time OCR Image Pixel Scanner (Scans Payee Name "Simhadri prudhviraj", Pass Amount ₹499/₹699, & UTR)
   const scanImagePixelsWithOcr = async (dataUrl: string) => {
     setIsScanningOcr(true);
-    setOcrStatusMessage("Scanning picture pixels for transaction ID...");
+    setOcrStatusMessage("Scanning picture pixels for payee name, amount & Txn ID...");
     setValidationError(null);
     setImageVerified(null);
     setExtractedImageUtr(null);
@@ -167,6 +168,29 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         setIsScanningOcr(false);
         setImageVerified(false);
         setValidationError("❌ OCR Scan Failed: No payment receipt text or transaction ID detected in the image pixels. Please upload a clear PhonePe, GPay, or Paytm payment screenshot.");
+        return false;
+      }
+
+      // 5. Verify Recipient Name ("Simhadri prudhviraj") if text is legible
+      const containsPayeeName = text.includes('simhadri') || 
+                                text.includes('prudhviraj') || 
+                                text.includes('8249213853');
+
+      if (rawTextOriginal.length > 30 && !containsPayeeName) {
+        setIsScanningOcr(false);
+        setImageVerified(false);
+        setValidationError(`❌ Payee Mismatch: The uploaded payment receipt was not sent to "${OFFICIAL_PAYEE_NAME}". Please pay to official UPI ID: ${DEFAULT_UPI_ID}`);
+        return false;
+      }
+
+      // 6. Verify Pass Amount (₹499 for Single, ₹699 for Couple)
+      const expectedAmount = getAmount().toString();
+      const containsAmount = text.includes(expectedAmount);
+
+      if (rawTextOriginal.length > 30 && !containsAmount) {
+        setIsScanningOcr(false);
+        setImageVerified(false);
+        setValidationError(`❌ Amount Mismatch: The uploaded payment receipt is not for ₹${expectedAmount}. Required amount for ${formData.numberOfPersons} Pass is ₹${expectedAmount}.`);
         return false;
       }
 
@@ -364,6 +388,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
         upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
+        payeeName: OFFICIAL_PAYEE_NAME,
         utrId: validatedUtr || formData.utrId.trim() || null,
         paymentScreenshot: screenshotDataUrl || screenshotPreview || null,
         verifiedPayment: true,
@@ -610,6 +635,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               <div style={{ background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', borderRadius: '16px', padding: '12px 20px', width: '100%' }}>
                 <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 600 }}>Total Pass Amount ({formData.numberOfPersons}):</div>
                 <div style={{ fontSize: '2.2rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</div>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>Payee Name: <strong>{OFFICIAL_PAYEE_NAME}</strong></div>
               </div>
 
               {/* Prominent High-Res QR Code Card */}
@@ -654,7 +680,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff' }}>Verify Payment Details</h3>
                 <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '2px' }}>
-                  Upload your screenshot & enter your 12-digit UTR ID manually to verify.
+                  Upload your screenshot (verifies payee "Simhadri prudhviraj", amount ₹{getAmount()} & Txn ID).
                 </p>
               </div>
 
@@ -677,7 +703,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#cbd5e1' }}>
                       <ScanLine size={28} className="animate-pulse" color="#ff0a1a" />
                       <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ff0a1a' }}>AI OCR Scanning Picture Pixels...</span>
-                      <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>Reading receipt text for verification</span>
+                      <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>Checking payee "Simhadri prudhviraj", ₹{getAmount()} & Txn ID</span>
                     </div>
                   ) : screenshotPreview ? (
                     <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -703,7 +729,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                         Tap to Choose Payment Screenshot
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        Upload receipt screenshot from PhonePe, GPay, or Paytm
+                        Must be sent to Simhadri prudhviraj for ₹{getAmount()}
                       </div>
                     </>
                   )}
@@ -816,6 +842,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     <span>Payment Method:</span>
                     <strong>{formData.paymentMethod}</strong>
                   </div>
+                  <div className="receipt-row">
+                    <span>Paid To:</span>
+                    <strong style={{ color: '#22c55e' }}>{OFFICIAL_PAYEE_NAME} ✓</strong>
+                  </div>
                   {formData.utrId && (
                     <div className="receipt-row">
                       <span>UTR / Txn ID:</span>
@@ -840,7 +870,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   onClick={handleDownloadReceipt} 
                   disabled={isDownloading}
                   className="submit-btn"
-                  style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 10px 25px rgba(37, 99, 235, 0.4)' }}
+                  style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 10px 25px rgba(255, 10, 26, 0.4)' }}
                 >
                   {isDownloading ? (
                     <>
