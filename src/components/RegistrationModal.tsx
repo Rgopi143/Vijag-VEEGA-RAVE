@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, HelpCircle, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, HelpCircle, ExternalLink, Loader2, AlertCircle, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -169,20 +169,33 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.mobileNumber && <span className="error-text">{errors.mobileNumber}</span>}
               </div>
 
-              {/* Number of Persons (Single / Couple Dropdown) */}
+              {/* Number of Persons (Single / Couple Selector Buttons) */}
               <div className="form-group">
                 <label className="form-label">
                   <Users size={16} /> Number of Persons <span className="req-star">*</span>
                 </label>
-                <select 
-                  value={formData.numberOfPersons}
-                  onChange={(e) => setFormData({ ...formData, numberOfPersons: e.target.value })}
-                  className={`form-input ${errors.numberOfPersons ? 'input-error' : ''}`}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <option value="Single" style={{ backgroundColor: '#121218', color: '#ffffff' }}>Single</option>
-                  <option value="Couple" style={{ backgroundColor: '#121218', color: '#ffffff' }}>Couple</option>
-                </select>
+
+                <div className="radio-group">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, numberOfPersons: 'Single' })}
+                    className={`radio-card ${formData.numberOfPersons === 'Single' ? 'radio-card-active' : ''}`}
+                    style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
+                  >
+                    {formData.numberOfPersons === 'Single' && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
+                    <span>Single (₹499)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, numberOfPersons: 'Couple' })}
+                    className={`radio-card ${formData.numberOfPersons === 'Couple' ? 'radio-card-active' : ''}`}
+                    style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
+                  >
+                    {formData.numberOfPersons === 'Couple' && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
+                    <span>Couple (₹699)</span>
+                  </button>
+                </div>
                 {errors.numberOfPersons && <span className="error-text">{errors.numberOfPersons}</span>}
               </div>
 
