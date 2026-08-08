@@ -173,7 +173,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       // Valid Payment Screenshot Confirmed via OCR!
       setIsScanningOcr(false);
       setImageVerified(true);
-      setOcrStatusMessage(foundUtr ? `✓ Scanned Receipt (Txn ID in picture: ${foundUtr})` : "✓ Scanned Valid Payment Screenshot");
+      setOcrStatusMessage("✓ Valid Payment Screenshot Attached");
       return true;
 
     } catch (err) {
@@ -321,7 +321,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                               (extractedImageUtr && cleanEnteredUtr.includes(extractedImageUtr));
 
       if (!isMatchInPicture && extractedImageUtr) {
-        setValidationError(`❌ Transaction ID Mismatch: The manually entered UTR ID ("${cleanUtr}") does NOT match the Transaction ID in your screenshot ("${extractedImageUtr}"). Please verify your UTR ID.`);
+        setValidationError(`❌ Transaction ID Mismatch: The manually entered UTR ID ("${cleanUtr}") does NOT match the Transaction ID in your screenshot. Please verify your UTR ID.`);
         return;
       }
     }
