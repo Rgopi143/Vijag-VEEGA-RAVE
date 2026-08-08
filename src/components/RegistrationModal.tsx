@@ -124,12 +124,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 </div>
               )}
 
-              {/* Email Record Banner */}
-              <div className="account-banner">
-                <Mail size={16} style={{ color: '#ff0a1a' }} />
-                <span>Record <strong>{formData.email || 'rgopinathreddyreddyvari38@gmail.com'}</strong> as the email to be included with response.</span>
-              </div>
-
               {/* Full Name */}
               <div className="form-group">
                 <label className="form-label">
