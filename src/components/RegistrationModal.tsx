@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, HelpCircle, ExternalLink } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, HelpCircle, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface RegistrationModalProps {
   isOpen: boolean;
@@ -20,8 +22,10 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
     referralSource: ''
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -35,9 +39,27 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate()) {
+    setFirestoreError(null);
+
+    if (!validate()) return;
+
+    setIsSubmitting(true);
+
+    try {
+      // Save entry to Cloud Firestore database under 'registrations' collection
+      await addDoc(collection(db, "registrations"), {
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+        mobileNumber: formData.mobileNumber.trim(),
+        numberOfPersons: parseInt(formData.numberOfPersons, 10),
+        paymentMethod: formData.paymentMethod,
+        referralSource: formData.referralSource.trim(),
+        createdAt: serverTimestamp(),
+        submittedAt: new Date().toISOString()
+      });
+
       setIsSubmitted(true);
       confetti({
         particleCount: 100,
@@ -45,6 +67,12 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
         origin: { y: 0.6 },
         colors: ['#ff0a1a', '#ffffff', '#ffd700']
       });
+    } catch (err: any) {
+      console.error("Firestore save error:", err);
+      // Even if offline/rules block, present smooth fallback
+      setFirestoreError("Unable to connect to Firestore database directly. Please try again or use the Google Form.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -59,6 +87,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
       referralSource: ''
     });
     setErrors({});
+    setFirestoreError(null);
     onClose();
   };
 
@@ -88,10 +117,18 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
           {!isSubmitted ? (
             <form onSubmit={handleSubmit} className="modal-form">
               
+              {/* Firestore Status / Error Banner */}
+              {firestoreError && (
+                <div className="p-3 bg-red-500/15 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-400 text-xs">
+                  <AlertCircle size={16} />
+                  <span>{firestoreError}</span>
+                </div>
+              )}
+
               {/* Email Record Banner */}
               <div className="account-banner">
                 <Mail size={16} className="text-[#ff0a1a]" />
-                <span>Record <strong>{formData.email || 'your email'}</strong> as the email to be included with response.</span>
+                <span>Record <strong>{formData.email || 'rgopinathreddyreddyvari38@gmail.com'}</strong> as the email to be included with response.</span>
               </div>
 
               {/* Full Name */}
@@ -195,9 +232,18 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
 
               {/* Submit Button & Direct Google Form Option */}
               <div className="flex flex-col gap-2 mt-2">
-                <button type="submit" className="submit-btn">
-                  <Send size={18} />
-                  <span>Submit Response</span>
+                <button type="submit" disabled={isSubmitting} className="submit-btn">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Saving to Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} />
+                      <span>Submit to Firestore</span>
+                    </>
+                  )}
                 </button>
                 
                 <a 
@@ -217,7 +263,7 @@ export default function RegistrationModal({ isOpen, onClose }: RegistrationModal
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
               </div>
-              <h3 className="conf-title">Registration Submitted!</h3>
+              <h3 className="conf-title">Saved to Firestore!</h3>
               <p className="conf-desc">
                 A copy of your responses will be emailed to <strong>{formData.email}</strong>.
               </p>
