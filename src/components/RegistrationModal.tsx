@@ -18,7 +18,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     fullName: '',
     email: '',
     mobileNumber: '',
-    numberOfPersons: '1',
+    numberOfPersons: 'Single',
     paymentMethod: 'UPI',
     referralSource: ''
   });
@@ -33,7 +33,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
     if (!formData.email.trim() || !formData.email.includes('@')) newErrors.email = 'Valid Email is required';
     if (!formData.mobileNumber.trim() || formData.mobileNumber.length < 10) newErrors.mobileNumber = 'Valid 10-digit mobile number required';
-    if (!formData.numberOfPersons || parseInt(formData.numberOfPersons, 10) < 1) newErrors.numberOfPersons = 'Number of persons must be at least 1';
+    if (!formData.numberOfPersons) newErrors.numberOfPersons = 'Please select Single or Couple';
     if (!formData.paymentMethod) newErrors.paymentMethod = 'Please select a payment method';
 
     setErrors(newErrors);
@@ -53,7 +53,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         fullName: formData.fullName.trim(),
         email: formData.email.trim(),
         mobileNumber: formData.mobileNumber.trim(),
-        numberOfPersons: parseInt(formData.numberOfPersons, 10),
+        numberOfPersons: formData.numberOfPersons,
         paymentMethod: formData.paymentMethod,
         referralSource: formData.referralSource.trim(),
         createdAt: serverTimestamp(),
@@ -81,7 +81,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       fullName: '',
       email: '',
       mobileNumber: '',
-      numberOfPersons: '1',
+      numberOfPersons: 'Single',
       paymentMethod: 'UPI',
       referralSource: ''
     });
@@ -169,19 +169,20 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.mobileNumber && <span className="error-text">{errors.mobileNumber}</span>}
               </div>
 
-              {/* Number of Persons */}
+              {/* Number of Persons (Single / Couple Dropdown) */}
               <div className="form-group">
                 <label className="form-label">
                   <Users size={16} /> Number of Persons <span className="req-star">*</span>
                 </label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  max="20"
+                <select 
                   value={formData.numberOfPersons}
                   onChange={(e) => setFormData({ ...formData, numberOfPersons: e.target.value })}
                   className={`form-input ${errors.numberOfPersons ? 'input-error' : ''}`}
-                />
+                  style={{ cursor: 'pointer' }}
+                >
+                  <option value="Single" style={{ backgroundColor: '#121218', color: '#ffffff' }}>Single</option>
+                  <option value="Couple" style={{ backgroundColor: '#121218', color: '#ffffff' }}>Couple</option>
+                </select>
                 {errors.numberOfPersons && <span className="error-text">{errors.numberOfPersons}</span>}
               </div>
 
