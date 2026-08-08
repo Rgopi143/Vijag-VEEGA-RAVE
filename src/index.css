@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: #060608;
+  color: #ffffff;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* App Container */
+.app-container {
+  min-height: 100vh;
+  width: 100%;
+  background-color: #060608;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Background Spotlight */
+.bg-spotlight {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.spotlight-orb {
+  position: absolute;
+  top: -15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 750px;
+  height: 750px;
+  background: radial-gradient(circle, rgba(255, 10, 26, 0.25) 0%, rgba(0, 0, 0, 0) 70%);
+  filter: blur(90px);
+}
+
+/* Main Canvas */
+.poster-main {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 650px;
+}
+
+.poster-card {
+  position: relative;
+  border-radius: 24px;
+  overflow: hidden;
+  background-color: #121216;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9), 0 0 60px rgba(255, 10, 26, 0.3);
+}
+
+.poster-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Pulse Ring Animation Behind Button */
+.pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 54%;
+  height: 9.5%;
+  border-radius: 50px;
+  background-color: rgba(255, 10, 26, 0.5);
+  pointer-events: none;
+  z-index: 5;
+  animation: pulseGlow 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes pulseGlow {
+  0% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.85;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.3, 1.45);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0;
+  }
+}
+
+/* Interactive get Launch Button */
+.btn-get-launch {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 52%;
+  max-width: 340px;
+  height: 9.5%;
+  max-height: 66px;
+  min-height: 48px;
+  background: linear-gradient(135deg, #ff0a1a 0%, #d90412 100%) !important;
+  color: #ffffff !important;
+  font-family: 'Outfit', sans-serif !important;
+  font-size: clamp(1.15rem, 3.4vw, 1.7rem) !important;
+  font-weight: 900 !important;
+  text-decoration: none !important;
+  border-radius: 50px !important;
+  border: 3.5px solid #ffffff !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 30px rgba(255, 10, 26, 0.85) !important;
+  cursor: pointer;
+  z-index: 10;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.btn-get-launch:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  background: linear-gradient(135deg, #ff2a38 0%, #ff0a1a 100%) !important;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.8), 0 0 45px rgba(255, 10, 26, 1) !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+.btn-get-launch:active {
+  transform: translate(-50%, -50%) scale(0.95);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6) !important;
+}
+
+.btn-icon {
+  width: 22px;
+  height: 22px;
+  color: #ffffff !important;
+  flex-shrink: 0;
+}
