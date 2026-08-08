@@ -11,8 +11,8 @@ interface RegistrationModalProps {
   theme?: 'light' | 'dark';
 }
 
-// DEFAULT UPI ID (VPA) FOR RECEIVING PAYMENTS
-const DEFAULT_UPI_ID = "rgopinathreddyreddyvari38@okicici";
+// OFFICIAL VEEGA RAVE UPI ID (VPA) FOR RECEIVING PAYMENTS
+const DEFAULT_UPI_ID = "8249213853-2@ibl";
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
   const [formData, setFormData] = useState({
@@ -38,7 +38,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const getUpiDeepLink = () => {
     const amount = getAmount();
     const note = encodeURIComponent(`VEEGA RAVE - ${formData.numberOfPersons} Pass (${formData.fullName})`);
-    const name = encodeURIComponent("VEEGA RAVE 2026");
+    const name = encodeURIComponent("VEEGA RAVE");
     return `upi://pay?pa=${upiId}&pn=${name}&am=${amount}&cu=INR&tn=${note}`;
   };
 
@@ -261,11 +261,11 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               {formData.paymentMethod === 'UPI' && (
                 <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Total Payable Amount:</span>
+                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Payable Amount to <strong>{upiId}</strong>:</span>
                     <span style={{ fontSize: '1.25rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                    ⚡ Clicking <strong>Submit & Pay via UPI</strong> will open GPay / PhonePe / Paytm directly on your phone.
+                    ⚡ Clicking <strong>Submit & Pay via UPI</strong> will open GPay / PhonePe / Paytm directly on your phone with ₹{getAmount()} prefilled for <strong>{upiId}</strong>.
                   </div>
                 </div>
               )}
@@ -309,7 +309,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
                   <img 
                     src={getQrCodeUrl()} 
-                    alt={`UPI QR Code for ₹${getAmount()}`}
+                    alt={`UPI QR Code for ₹${getAmount()} to ${upiId}`}
                     style={{ width: '180px', height: '180px', borderRadius: '12px', border: '4px solid #ffffff' }}
                   />
 
@@ -323,7 +323,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                     style={{ textDecoration: 'none', width: '100%', marginTop: '4px' }}
                   >
                     <ExternalLink size={18} />
-                    <span>Pay ₹{getAmount()} via GPay / PhonePe / Paytm</span>
+                    <span>Pay ₹{getAmount()} to {upiId}</span>
                   </a>
                 </div>
               )}
