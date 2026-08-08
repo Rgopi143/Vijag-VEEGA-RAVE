@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Upload, Clock, Image as ImageIcon, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -11,7 +11,7 @@ interface RegistrationModalProps {
   theme?: 'light' | 'dark';
 }
 
-// OFFICIAL VEEGA RAVE UPI ID & PHONE NUMBER
+// OFFICIAL VEEGA RAVE UPI ID
 const DEFAULT_UPI_ID = "8249213853-2@ibl";
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
@@ -25,6 +25,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
   const upiId = DEFAULT_UPI_ID;
   const [showQrStep, setShowQrStep] = useState(false);
+  const [showUploadStep, setShowUploadStep] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(60);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,6 +51,49 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
   };
 
+  // 1-Minute Countdown Timer for QR Code Step
+  useEffect(() => {
+    let timer: any = null;
+    if (showQrStep && !showUploadStep && !isSubmitted) {
+      setTimerSeconds(60);
+      timer = setInterval(() => {
+        setTimerSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            // 1 Minute Completed -> Automatically open Upload Screenshot page!
+            setShowQrStep(false);
+            setShowUploadStep(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showQrStep, showUploadStep, isSubmitted]);
+
+  // Format seconds into 0:59 display
+  const formatTime = (secs: number) => {
+    const minutes = Math.floor(secs / 60);
+    const remainingSecs = secs % 60;
+    return `${minutes}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
+  };
+
+  // Handle Image File Selection
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setScreenshotFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScreenshotPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
@@ -61,7 +108,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return Object.keys(newErrors).length === 0;
   };
 
-  // Proceed to QR Code payment view or direct submit
+  // Step 1 Submit: Proceed to QR Code payment
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     setFirestoreError(null);
@@ -70,13 +117,20 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
     if (formData.paymentMethod === 'UPI') {
       setShowQrStep(true);
+      setShowUploadStep(false);
     } else {
-      saveFinalRegistration();
+      saveFinalRegistration(null);
     }
   };
 
+  // Step 2 Proceed: Manually jump to upload screenshot step before timer ends
+  const handleProceedToUploadScreen = () => {
+    setShowQrStep(false);
+    setShowUploadStep(true);
+  };
+
   // Save to Cloud Firestore
-  const saveFinalRegistration = async () => {
+  const saveFinalRegistration = async (screenshotBase64: string | null = null) => {
     setIsSubmitting(true);
     const amount = getAmount();
 
@@ -89,12 +143,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
         upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
+        paymentScreenshot: screenshotBase64 || screenshotPreview || null,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
 
       setIsSubmitted(true);
       setShowQrStep(false);
+      setShowUploadStep(false);
       confetti({
         particleCount: 120,
         spread: 90,
@@ -103,9 +159,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       });
     } catch (err: any) {
       console.error("Firestore save error:", err);
-      // Fallback show confirmation pass
       setIsSubmitted(true);
       setShowQrStep(false);
+      setShowUploadStep(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -114,6 +170,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const handleReset = () => {
     setIsSubmitted(false);
     setShowQrStep(false);
+    setShowUploadStep(false);
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
     setFormData({
       fullName: '',
       email: '',
@@ -134,7 +193,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         <motion.div 
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          exit={{ opacity: 0, scale: 0.9, y: 0 }}
           transition={{ duration: 0.3 }}
           className="modal-card"
         >
@@ -148,7 +207,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
             </button>
           </div>
 
-          {!isSubmitted && !showQrStep ? (
+          {!isSubmitted && !showQrStep && !showUploadStep ? (
             /* STEP 1: Registration Form */
             <form onSubmit={handleProceedToPayment} className="modal-form">
               
@@ -272,12 +331,18 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
               </div>
 
             </form>
-          ) : !isSubmitted && showQrStep ? (
-            /* STEP 2: Pure Clean High-Res QR Code Payment Screen */
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center' }}>
+          ) : !isSubmitted && showQrStep && !showUploadStep ? (
+            /* STEP 2: High-Res QR Code Screen with 1-Minute Live Timer */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
               
-              {/* Header Box */}
-              <div style={{ background: 'rgba(255, 10, 26, 0.1)', border: '1px solid rgba(255, 10, 26, 0.3)', borderRadius: '16px', padding: '14px', width: '100%' }}>
+              {/* 1-Minute Live Countdown Timer Badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 10, 26, 0.15)', border: '1.5px solid #ff0a1a', padding: '10px 18px', borderRadius: '50px', color: '#ffffff', fontWeight: 800, fontSize: '0.95rem' }}>
+                <Clock size={18} color="#ff0a1a" className="animate-pulse" />
+                <span>Scanner Active: <strong style={{ color: '#ff0a1a', fontSize: '1.1rem' }}>{formatTime(timerSeconds)}</strong></span>
+              </div>
+
+              {/* Total Amount Box */}
+              <div style={{ background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', borderRadius: '16px', padding: '12px 20px', width: '100%' }}>
                 <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 600 }}>Total Pass Amount ({formData.numberOfPersons}):</div>
                 <div style={{ fontSize: '2.2rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</div>
               </div>
@@ -287,20 +352,86 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 <img 
                   src={getQrCodeUrl()} 
                   alt={`UPI QR Code for ₹${getAmount()}`}
-                  style={{ width: '230px', height: '230px', display: 'block', borderRadius: '12px' }}
+                  style={{ width: '220px', height: '220px', display: 'block', borderRadius: '12px' }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e2e8f0', fontWeight: 700, fontSize: '0.95rem' }}>
                 <QrCode size={18} color="#ff0a1a" />
-                <span>Scan with GPay, PhonePe, Paytm or any UPI App</span>
+                <span>Scan & Pay with GPay, PhonePe, Paytm or any UPI App</span>
               </div>
 
-              {/* Green Submit Confirmation Button */}
+              {/* Next Button / Timer Redirect Hint */}
               <div style={{ width: '100%', marginTop: '6px' }}>
                 <button 
                   type="button"
-                  onClick={saveFinalRegistration}
+                  onClick={handleProceedToUploadScreen}
+                  className="submit-btn"
+                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
+                >
+                  <ArrowRight size={18} />
+                  <span>I Have Paid (Upload Screenshot)</span>
+                </button>
+                
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
+                  ⏳ Redirecting to upload payment screenshot automatically in {timerSeconds}s...
+                </p>
+              </div>
+
+            </div>
+          ) : !isSubmitted && showUploadStep ? (
+            /* STEP 3: Upload Payment Screenshot Screen */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'rgba(255, 10, 26, 0.15)', color: '#ff0a1a', marginBottom: '8px' }}>
+                  <Upload size={32} />
+                </div>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff' }}>Upload Payment Screenshot</h3>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>
+                  Please upload the payment confirmation screenshot for ₹{getAmount()}
+                </p>
+              </div>
+
+              {/* Custom File Upload Box / Drag-Drop Zone */}
+              <label htmlFor="screenshot-upload" className="upload-dropzone">
+                {screenshotPreview ? (
+                  <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <img 
+                      src={screenshotPreview} 
+                      alt="Payment Screenshot Preview" 
+                      style={{ maxHeight: '200px', maxWidth: '100%', borderRadius: '12px', border: '2px solid #ff0a1a' }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: '#22c55e', marginTop: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Check size={14} /> Screenshot Selected ({screenshotFile?.name})
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <ImageIcon size={40} color="#ff0a1a" />
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>
+                      Tap to Choose or Take Screenshot
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                      Supports PNG, JPG, JPEG (Max 10MB)
+                    </div>
+                  </>
+                )}
+
+                <input 
+                  id="screenshot-upload"
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                <button 
+                  type="button"
+                  onClick={() => saveFinalRegistration(screenshotPreview)}
                   disabled={isSubmitting}
                   className="submit-btn"
                   style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
@@ -308,12 +439,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Confirming Registration...</span>
+                      <span>Saving Registration & Screenshot...</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>I Have Scanned & Completed Payment</span>
+                      <span>Submit Registration & Screenshot</span>
                     </>
                   )}
                 </button>
@@ -321,14 +452,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </div>
           ) : (
-            /* STEP 3: Confirmation Pass View */
+            /* STEP 4: Registration Confirmed Pass View */
             <div className="confirmation-card">
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
               </div>
               <h3 className="conf-title">Registration Confirmed!</h3>
               <p className="conf-desc">
-                Your entry pass details have been saved successfully to Firestore.
+                Your entry pass & payment screenshot have been saved successfully to Firestore.
               </p>
 
               <div className="receipt-summary">
@@ -351,6 +482,12 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 <div className="receipt-row">
                   <span>Payment Method:</span>
                   <strong>{formData.paymentMethod}</strong>
+                </div>
+                <div className="receipt-row">
+                  <span>Screenshot Status:</span>
+                  <strong style={{ color: screenshotPreview ? '#22c55e' : '#eab308' }}>
+                    {screenshotPreview ? 'Uploaded ✓' : 'Submitted'}
+                  </strong>
                 </div>
                 <div className="receipt-row">
                   <span>Status:</span>
