@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink, Copy, CheckCheck } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, ExternalLink, Copy, CheckCheck, Smartphone } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -25,6 +25,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   });
 
   const upiId = DEFAULT_UPI_ID;
+  const [showQrStep, setShowQrStep] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [copiedMobile, setCopiedMobile] = useState(false);
@@ -37,16 +38,16 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return formData.numberOfPersons === 'Couple' ? 699 : 499;
   };
 
-  // Clean UPI Deep Link for GPay / PhonePe / Paytm (avoiding NPCI merchant flags)
+  // Clean UPI Link for GPay / PhonePe / Paytm
   const getUpiDeepLink = () => {
     const amount = getAmount();
     return `upi://pay?pa=${upiId}&am=${amount}&cu=INR`;
   };
 
-  // Generate QR Code URL
+  // Generate High-Res QR Code URL
   const getQrCodeUrl = () => {
     const upiUrl = getUpiDeepLink();
-    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
   };
 
   const copyToClipboard = (text: string, type: 'mobile' | 'upi') => {
@@ -74,54 +75,25 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Proceed to QR Code payment view or direct submit
+  const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     setFirestoreError(null);
 
     if (!validate()) return;
 
-    setIsSubmitting(true);
-
-    const amount = getAmount();
-    const deepLink = getUpiDeepLink();
-
     if (formData.paymentMethod === 'UPI') {
-      // Background non-blocking save to Firestore with 1.2s timeout safety
-      try {
-        const savePromise = addDoc(collection(db, "registrations"), {
-          fullName: formData.fullName.trim(),
-          email: formData.email.trim(),
-          mobileNumber: formData.mobileNumber.trim(),
-          numberOfPersons: formData.numberOfPersons,
-          paymentMethod: formData.paymentMethod,
-          ticketAmount: amount,
-          upiIdUsed: upiId,
-          createdAt: serverTimestamp(),
-          submittedAt: new Date().toISOString()
-        });
-
-        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
-        await Promise.race([savePromise, timeoutPromise]);
-      } catch (err) {
-        console.warn("Firestore save warning:", err);
-      }
-
-      setIsSubmitted(true);
-      setIsSubmitting(false);
-
-      confetti({
-        particleCount: 100,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ['#ff0a1a', '#ffffff', '#ffd700']
-      });
-
-      // LAUNCH CLEANED UPI DEEP LINK
-      window.location.href = deepLink;
-      return;
+      setShowQrStep(true);
+    } else {
+      saveFinalRegistration();
     }
+  };
 
-    // Cash at Venue path
+  // Save to Cloud Firestore
+  const saveFinalRegistration = async () => {
+    setIsSubmitting(true);
+    const amount = getAmount();
+
     try {
       await addDoc(collection(db, "registrations"), {
         fullName: formData.fullName.trim(),
@@ -130,13 +102,24 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
         numberOfPersons: formData.numberOfPersons,
         paymentMethod: formData.paymentMethod,
         ticketAmount: amount,
+        upiIdUsed: formData.paymentMethod === 'UPI' ? upiId : null,
         createdAt: serverTimestamp(),
         submittedAt: new Date().toISOString()
       });
+
       setIsSubmitted(true);
+      setShowQrStep(false);
+      confetti({
+        particleCount: 120,
+        spread: 90,
+        origin: { y: 0.6 },
+        colors: ['#ff0a1a', '#ffffff', '#ffd700']
+      });
     } catch (err: any) {
       console.error("Firestore save error:", err);
+      // Fallback show confirmation pass
       setIsSubmitted(true);
+      setShowQrStep(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -144,6 +127,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
   const handleReset = () => {
     setIsSubmitted(false);
+    setShowQrStep(false);
     setFormData({
       fullName: '',
       email: '',
@@ -178,8 +162,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
             </button>
           </div>
 
-          {!isSubmitted ? (
-            <form onSubmit={handleSubmit} className="modal-form">
+          {!isSubmitted && !showQrStep ? (
+            /* STEP 1: Registration Form */
+            <form onSubmit={handleProceedToPayment} className="modal-form">
               
               {/* Firestore Status / Error Banner */}
               {firestoreError && (
@@ -292,112 +277,119 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
               </div>
 
-              {/* Dynamic UPI Price & Quick Copy Options */}
-              {formData.paymentMethod === 'UPI' && (
-                <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255, 10, 26, 0.08)', border: '1px solid rgba(255, 10, 26, 0.25)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>Total Payable Amount:</span>
-                    <span style={{ fontSize: '1.3rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#94a3b8' }}>Payee Phone Number:</span>
-                      <button 
-                        type="button"
-                        onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
-                        style={{ background: 'none', border: 'none', color: '#ff0a1a', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <span>{PAYEE_MOBILE}</span>
-                        {copiedMobile ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#94a3b8' }}>Payee UPI ID:</span>
-                      <button 
-                        type="button"
-                        onClick={() => copyToClipboard(UPI_ID_CLEAN(upiId), 'upi')}
-                        style={{ background: 'none', border: 'none', color: '#ffffff', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <span>{upiId}</span>
-                        {copiedUpi ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Submit Button */}
               <div style={{ marginTop: '8px' }}>
-                <button type="submit" disabled={isSubmitting} className="submit-btn">
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Opening UPI App...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} />
-                      <span>{formData.paymentMethod === 'UPI' ? `Pay ₹${getAmount()} via UPI App` : 'Submit Response'}</span>
-                    </>
-                  )}
+                <button type="submit" className="submit-btn">
+                  <Send size={18} />
+                  <span>{formData.paymentMethod === 'UPI' ? `Get UPI QR Code (₹${getAmount()})` : 'Submit Registration'}</span>
                 </button>
               </div>
 
             </form>
+          ) : !isSubmitted && showQrStep ? (
+            /* STEP 2: Dedicated UPI QR Code Payment Screen */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center' }}>
+              
+              {/* Header Box */}
+              <div style={{ background: 'rgba(255, 10, 26, 0.1)', border: '1px solid rgba(255, 10, 26, 0.3)', borderRadius: '16px', padding: '14px', width: '100%' }}>
+                <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 600 }}>Total Pass Amount ({formData.numberOfPersons}):</div>
+                <div style={{ fontSize: '2.2rem', color: '#ff0a1a', fontWeight: 900 }}>₹{getAmount()}</div>
+              </div>
+
+              {/* Prominent High-Res QR Code Card */}
+              <div style={{ background: '#ffffff', padding: '18px', borderRadius: '24px', boxShadow: '0 15px 40px rgba(255, 10, 26, 0.35)', border: '4px solid #ff0a1a' }}>
+                <img 
+                  src={getQrCodeUrl()} 
+                  alt={`UPI QR Code for ₹${getAmount()}`}
+                  style={{ width: '220px', height: '220px', display: 'block', borderRadius: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e2e8f0', fontWeight: 700, fontSize: '0.95rem' }}>
+                <QrCode size={18} color="#ff0a1a" />
+                <span>Scan with GPay, PhonePe, Paytm or any UPI App</span>
+              </div>
+
+              {/* Quick Copy Helpers for Phone Number & UPI ID */}
+              <div style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                  <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Smartphone size={14} color="#ff0a1a" /> Pay via Phone Number:
+                  </span>
+                  <button 
+                    type="button" 
+                    onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
+                    style={{ background: '#ff0a1a', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                  >
+                    <span>{PAYEE_MOBILE}</span>
+                    {copiedMobile ? <CheckCheck size={14} color="#ffffff" /> : <Copy size={14} />}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                  <span style={{ color: '#94a3b8' }}>UPI ID:</span>
+                  <button 
+                    type="button" 
+                    onClick={() => copyToClipboard(upiId, 'upi')}
+                    style={{ background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                  >
+                    <span>{upiId}</span>
+                    {copiedUpi ? <CheckCheck size={14} color="#22c55e" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                <a 
+                  href={getUpiDeepLink()}
+                  className="submit-btn"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ExternalLink size={18} />
+                  <span>Open UPI App Directly</span>
+                </a>
+
+                <button 
+                  type="button"
+                  onClick={saveFinalRegistration}
+                  disabled={isSubmitting}
+                  className="submit-btn"
+                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', boxShadow: '0 10px 25px rgba(22, 163, 74, 0.4)' }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Confirming Registration...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>I Have Scanned & Completed Payment</span>
+                    </>
+                  )}
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => setShowQrStep(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  ← Back to Registration Form
+                </button>
+              </div>
+
+            </div>
           ) : (
-            /* Confirmation Pass View with UPI Payment Details & Mobile Number Option */
+            /* STEP 3: Confirmation Pass View */
             <div className="confirmation-card">
               <div className="conf-icon">
                 <CheckCircle2 size={56} color="#ff0a1a" />
               </div>
-              <h3 className="conf-title">Registration Submitted!</h3>
+              <h3 className="conf-title">Registration Confirmed!</h3>
               <p className="conf-desc">
                 Your entry pass details have been saved successfully to Firestore.
               </p>
-
-              {/* If UPI option was selected, display QR code, Phone Number, and Pay button */}
-              {formData.paymentMethod === 'UPI' && (
-                <div style={{ background: '#181820', border: '1.5px solid #ff0a1a', borderRadius: '20px', padding: '20px', margin: '16px 0 24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', fontWeight: 800, fontSize: '1.1rem' }}>
-                    <QrCode size={20} color="#ff0a1a" />
-                    <span>Scan & Pay ₹{getAmount()}</span>
-                  </div>
-
-                  <img 
-                    src={getQrCodeUrl()} 
-                    alt={`UPI QR Code for ₹${getAmount()}`}
-                    style={{ width: '180px', height: '180px', borderRadius: '12px', border: '4px solid #ffffff' }}
-                  />
-
-                  {/* Pay via Mobile Number Helper Box (Bypasses Paytm Protect alerts) */}
-                  <div style={{ width: '100%', background: 'rgba(255, 10, 26, 0.1)', border: '1px solid rgba(255, 10, 26, 0.3)', borderRadius: '12px', padding: '12px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                      💡 If Paytm / PhonePe shows an alert, choose <strong>"Pay via Mobile Number"</strong> or <strong>"Pay via Scanning QR"</strong>:
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
-                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>{PAYEE_MOBILE}</span>
-                      <button 
-                        type="button" 
-                        onClick={() => copyToClipboard(PAYEE_MOBILE, 'mobile')}
-                        style={{ padding: '4px 10px', borderRadius: '6px', background: '#ff0a1a', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        {copiedMobile ? 'Copied!' : 'Copy Phone Number'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <a 
-                    href={getUpiDeepLink()}
-                    className="submit-btn"
-                    style={{ textDecoration: 'none', width: '100%', marginTop: '4px' }}
-                  >
-                    <ExternalLink size={18} />
-                    <span>Open GPay / PhonePe / Paytm (₹{getAmount()})</span>
-                  </a>
-                </div>
-              )}
 
               <div className="receipt-summary">
                 <div className="receipt-row">
@@ -420,6 +412,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   <span>Payment Method:</span>
                   <strong>{formData.paymentMethod}</strong>
                 </div>
+                <div className="receipt-row">
+                  <span>Status:</span>
+                  <strong style={{ color: '#22c55e' }}>Confirmed</strong>
+                </div>
               </div>
 
               <button type="button" onClick={handleReset} className="submit-btn">
@@ -433,8 +429,4 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       </div>
     </AnimatePresence>
   );
-}
-
-function UPI_ID_CLEAN(id: string) {
-  return id;
 }
