@@ -425,3 +425,36 @@ html, body {
 .google-form-link:hover {
   text-decoration: underline;
 }
+
+/* Responsive Mobile Layout Adjustments */
+@media (max-width: 520px) {
+  .modal-overlay {
+    padding: 12px 10px;
+  }
+
+  .modal-card {
+    padding: 20px 16px;
+    border-radius: 20px;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-size: 1.45rem;
+  }
+
+  .radio-group {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .radio-card {
+    padding: 10px 4px !important;
+    font-size: 0.8rem;
+  }
+
+  .submit-btn {
+    padding: 14px;
+    font-size: 1rem;
+  }
+}

@@ -532,10 +532,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                       type="button"
                       onClick={() => setFormData({ ...formData, numberOfPersons: option.id })}
                       className={`radio-card ${formData.numberOfPersons === option.id ? 'radio-card-active' : ''}`}
-                      style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
+                      style={{ justifyContent: 'center', padding: '12px 10px', gap: '6px' }}
                     >
-                      {formData.numberOfPersons === option.id && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
-                      <span>{option.label}</span>
+                      {formData.numberOfPersons === option.id && <Check size={15} style={{ color: '#ff0a1a', flexShrink: 0 }} />}
+                      <span style={{ fontSize: '0.88rem', whiteSpace: 'nowrap' }}>{option.label}</span>
                     </button>
                   ))}
                 </div>
