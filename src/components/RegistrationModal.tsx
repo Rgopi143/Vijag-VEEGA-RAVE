@@ -48,7 +48,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const [ocrExtractedText, setOcrExtractedText] = useState<string>('');
   const [imageVerified, setImageVerified] = useState<boolean | null>(null);
 
-  const [isCheckingExisting, setIsCheckingExisting] = useState(false);
   const [existingPassFound, setExistingPassFound] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
