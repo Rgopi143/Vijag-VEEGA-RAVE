@@ -93,6 +93,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(dataString)}`;
   };
 
+  // Preload QR Code Image in background for instant display
+  useEffect(() => {
+    if (isOpen) {
+      const img = new Image();
+      img.src = getQrCodeUrl();
+    }
+  }, [isOpen, formData.numberOfPersons]);
+
   // 1-Minute Countdown Timer for QR Code Step
   useEffect(() => {
     let timer: any = null;
@@ -246,62 +254,14 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     return Object.keys(newErrors).length === 0;
   };
 
-  // Step 1 Submit: Check for existing registration before proceeding
-  const handleProceedToPayment = async (e: React.FormEvent) => {
+  // Step 1 Submit: Proceed to payment QR screen immediately with 0ms delay
+  const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     setFirestoreError(null);
-    setExistingPassFound(false);
 
     if (!validateStep1()) return;
 
-    setIsCheckingExisting(true);
-    const cleanMobile = formData.mobileNumber.trim();
-    const cleanEmail = formData.email.trim().toLowerCase();
-
-    try {
-      // Check if an active registration already exists for this Mobile Number or Email
-      const mobileQuery = query(collection(db, "registrations"), where("mobileNumber", "==", cleanMobile));
-      const mobileSnapshot = await getDocs(mobileQuery);
-
-      let existingDocData: any = null;
-
-      if (!mobileSnapshot.empty) {
-        existingDocData = mobileSnapshot.docs[0].data();
-      } else {
-        const emailQuery = query(collection(db, "registrations"), where("email", "==", cleanEmail));
-        const emailSnapshot = await getDocs(emailQuery);
-        if (!emailSnapshot.empty) {
-          existingDocData = emailSnapshot.docs[0].data();
-        }
-      }
-
-      if (existingDocData) {
-        // EXISTING REGISTRATION PASS FOUND -> DISPLAY RECEIPT DIRECTLY!
-        setFormData({
-          fullName: existingDocData.fullName || formData.fullName,
-          email: existingDocData.email || formData.email,
-          mobileNumber: existingDocData.mobileNumber || formData.mobileNumber,
-          numberOfPersons: existingDocData.numberOfPersons || 'Single',
-          paymentMethod: existingDocData.paymentMethod || 'UPI',
-          utrId: existingDocData.utrId || 'CONFIRMED'
-        });
-        if (existingDocData.paymentScreenshot) {
-          setScreenshotPreview(existingDocData.paymentScreenshot);
-        }
-        setExistingPassFound(true);
-        setIsSubmitted(true);
-        setShowQrStep(false);
-        setShowUtrStep(false);
-        setIsCheckingExisting(false);
-        return;
-      }
-    } catch (err) {
-      console.warn("Existing registration check error:", err);
-    } finally {
-      setIsCheckingExisting(false);
-    }
-
-    // No existing registration found -> Proceed with payment
+    // Instant zero-delay transition to QR step
     setShowQrStep(true);
     setShowUtrStep(false);
   };
@@ -584,18 +544,9 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
               {/* Submit Button */}
               <div style={{ marginTop: '12px' }}>
-                <button type="submit" disabled={isCheckingExisting} className="submit-btn">
-                  {isCheckingExisting ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Checking Registration Status...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} />
-                      <span>Get UPI QR Code (₹{getAmount()})</span>
-                    </>
-                  )}
+                <button type="submit" className="submit-btn">
+                  <Send size={18} />
+                  <span>Get UPI QR Code (₹{getAmount()})</span>
                 </button>
               </div>
 
