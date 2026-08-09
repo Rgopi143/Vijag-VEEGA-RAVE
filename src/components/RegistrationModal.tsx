@@ -37,7 +37,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
   const upiId = DEFAULT_UPI_ID;
   const [showQrStep, setShowQrStep] = useState(false);
   const [showUtrStep, setShowUtrStep] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(60);
+  const [timerSeconds, setTimerSeconds] = useState(120);
 
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   
@@ -101,16 +101,16 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     }
   }, [isOpen, formData.numberOfPersons]);
 
-  // 1-Minute Countdown Timer for QR Code Step
+  // 2-Minute Countdown Timer for QR Code Step
   useEffect(() => {
     let timer: any = null;
     if (showQrStep && !showUtrStep && !isSubmitted) {
-      setTimerSeconds(60);
+      setTimerSeconds(120);
       timer = setInterval(() => {
         setTimerSeconds((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            // 1 Minute Completed -> Automatically open Enter UTR page!
+            // 2 Minutes Completed -> Automatically open Enter UTR page!
             setShowQrStep(false);
             setShowUtrStep(true);
             return 0;
@@ -552,10 +552,10 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
             </form>
           ) : !isSubmitted && showQrStep && !showUtrStep ? (
-            /* STEP 2: High-Res QR Code Screen with 1-Minute Live Timer */
+            /* STEP 2: High-Res QR Code Screen with 2-Minute Live Timer */
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
               
-              {/* 1-Minute Live Countdown Timer Badge */}
+              {/* 2-Minute Live Countdown Timer Badge */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 10, 26, 0.15)', border: '1.5px solid #ff0a1a', padding: '10px 18px', borderRadius: '50px', color: '#ffffff', fontWeight: 800, fontSize: '0.95rem' }}>
                 <Clock size={18} color="#ff0a1a" className="animate-pulse" />
                 <span>Scanner Active: <strong style={{ color: '#ff0a1a', fontSize: '1.1rem' }}>{formatTime(timerSeconds)}</strong></span>
