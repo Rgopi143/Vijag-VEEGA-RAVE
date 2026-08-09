@@ -458,3 +458,87 @@ html, body {
     font-size: 1rem;
   }
 }
+
+/* WhatsApp Icon Overlay on Poster Card at Right Side of SUNDAY */
+.whatsapp-overlay-btn {
+  position: absolute;
+  top: 85.5%;
+  left: 69.5%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #25D366;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(37, 211, 102, 0.75), 0 0 12px rgba(37, 211, 102, 0.5);
+  text-decoration: none;
+  z-index: 15;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: pulseWhatsapp 2s infinite ease-in-out;
+}
+
+.whatsapp-overlay-btn:hover {
+  background: #20ba5a;
+  box-shadow: 0 6px 24px rgba(37, 211, 102, 0.95), 0 0 24px rgba(37, 211, 102, 0.8);
+}
+
+.whatsapp-svg {
+  width: 22px;
+  height: 22px;
+}
+
+@keyframes pulseWhatsapp {
+  0%, 100% {
+    box-shadow: 0 4px 18px rgba(37, 211, 102, 0.75), 0 0 12px rgba(37, 211, 102, 0.5);
+  }
+  50% {
+    box-shadow: 0 4px 28px rgba(37, 211, 102, 1), 0 0 28px rgba(37, 211, 102, 0.9);
+  }
+}
+
+/* Event Date Bar below Poster Card */
+.event-date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 10px 20px;
+  border-radius: 50px;
+  background: rgba(18, 18, 24, 0.85);
+  border: 1px solid rgba(255, 10, 26, 0.3);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+}
+
+.date-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ff0a1a;
+  letter-spacing: 0.8px;
+}
+
+.whatsapp-date-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: #25D366;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.5);
+  transition: all 0.2s ease;
+}
+
+.whatsapp-date-link:hover {
+  background: #20ba5a;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(37, 211, 102, 0.7);
+}
+
