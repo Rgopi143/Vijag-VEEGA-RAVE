@@ -18,7 +18,7 @@ const WhatsAppIcon = ({ className = "whatsapp-icon" }: { className?: string }) =
 
 export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const whatsappUrl = import.meta.env.VITE_WHATSAPP_URL || 'https://wa.me/?text=Hi!%20I%20have%20a%20query%20about%20Veega%20Rave%202026';
+  const whatsappUrl = import.meta.env.VITE_WHATSAPP_URL || 'https://wa.me/919398435150?text=Hi!%20I%20have%20a%20query%20about%20Veega%20Rave%202026';
 
   useEffect(() => {
     // Default dark theme for pitch black background
