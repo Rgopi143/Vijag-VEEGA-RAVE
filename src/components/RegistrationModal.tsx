@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, CreditCard, Loader2, AlertCircle, Check, QrCode, Clock, ArrowRight, ShieldCheck, Hash, Download, Upload, Image as ImageIcon, ShieldAlert, ScanLine } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Send, User, Mail, Phone, Users, Loader2, AlertCircle, Check, QrCode, Clock, ArrowRight, ShieldCheck, Hash, Download, Upload, Image as ImageIcon, ShieldAlert, ScanLine } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import html2canvas from 'html2canvas';
 import { recognize } from 'tesseract.js';
@@ -21,7 +21,7 @@ const OFFICIAL_PAYEE_NAME = "Simhadri prudhviraj";
 const REQUIRED_PAYMENT_KEYWORDS = [
   'paid', 'payment', 'successful', 'success', 'completed', 'transfer',
   'gpay', 'google pay', 'phonepe', 'paytm', 'bhim', 'upi', 'utr', 'ref',
-  'transaction', 'txn', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', 'simhadri', 'prudhviraj', '8249213853'
+  'transaction', 'txn', 'sent to', 'paid to', 'debited from', 'rs', 'rupees', '₹', '499', '699', '1850', '2900', 'simhadri', 'prudhviraj', '8249213853'
 ];
 
 export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: RegistrationModalProps) {
@@ -60,9 +60,19 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
 
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  // Calculate ticket price based on Single (₹499) or Couple (₹699)
+  // Calculate ticket price based on selected pass type
   const getAmount = () => {
-    return formData.numberOfPersons === 'Couple' ? 699 : 499;
+    switch (formData.numberOfPersons) {
+      case 'Couple':
+        return 699;
+      case '4 People':
+        return 1850;
+      case '6 People':
+        return 2900;
+      case 'Single':
+      default:
+        return 499;
+    }
   };
 
   // Clean UPI Link for GPay / PhonePe / Paytm
@@ -231,7 +241,6 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
       newErrors.mobileNumber = 'Mobile number must be exactly 10 digits';
     }
     if (!formData.numberOfPersons) newErrors.numberOfPersons = 'Please select Single or Couple';
-    if (!formData.paymentMethod) newErrors.paymentMethod = 'Please select a payment method';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -293,12 +302,8 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
     }
 
     // No existing registration found -> Proceed with payment
-    if (formData.paymentMethod === 'UPI') {
-      setShowQrStep(true);
-      setShowUtrStep(false);
-    } else {
-      saveFinalRegistration(null, null);
-    }
+    setShowQrStep(true);
+    setShowUtrStep(false);
   };
 
   // Step 2 Proceed: Jump to UTR verification step before timer ends
@@ -549,62 +554,36 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                 {errors.mobileNumber && <span className="error-text">{errors.mobileNumber}</span>}
               </div>
 
-              {/* Number of Persons (Single / Couple Selector Buttons) */}
+              {/* Number of Persons (Single / Couple / 4 People / 6 People Selector Buttons) */}
               <div className="form-group">
                 <label className="form-label">
                   <Users size={16} /> Number of Persons <span className="req-star">*</span>
                 </label>
 
                 <div className="radio-group">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, numberOfPersons: 'Single' })}
-                    className={`radio-card ${formData.numberOfPersons === 'Single' ? 'radio-card-active' : ''}`}
-                    style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
-                  >
-                    {formData.numberOfPersons === 'Single' && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
-                    <span>Single (₹499)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, numberOfPersons: 'Couple' })}
-                    className={`radio-card ${formData.numberOfPersons === 'Couple' ? 'radio-card-active' : ''}`}
-                    style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
-                  >
-                    {formData.numberOfPersons === 'Couple' && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
-                    <span>Couple (₹699)</span>
-                  </button>
+                  {[
+                    { id: 'Single', label: 'Single (₹499)' },
+                    { id: 'Couple', label: 'Couple (₹699)' },
+                    { id: '4 People', label: '4 People (₹1,850)' },
+                    { id: '6 People', label: '6 People (₹2,900)' },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, numberOfPersons: option.id })}
+                      className={`radio-card ${formData.numberOfPersons === option.id ? 'radio-card-active' : ''}`}
+                      style={{ justifyContent: 'center', padding: '14px', position: 'relative' }}
+                    >
+                      {formData.numberOfPersons === option.id && <Check size={16} style={{ color: '#ff0a1a', position: 'absolute', left: '12px' }} />}
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
                 </div>
                 {errors.numberOfPersons && <span className="error-text">{errors.numberOfPersons}</span>}
               </div>
 
-              {/* Payment Method (UPI & Cash at Venue) */}
-              <div className="form-group">
-                <label className="form-label">
-                  <CreditCard size={16} /> Which payment method do you prefer for your entry pass? <span className="req-star">*</span>
-                </label>
-
-                <div className="radio-group">
-                  {['UPI', 'Cash at Venue'].map((method) => (
-                    <label key={method} className={`radio-card ${formData.paymentMethod === method ? 'radio-card-active' : ''}`}>
-                      <input 
-                        type="radio" 
-                        name="paymentMethod" 
-                        value={method}
-                        checked={formData.paymentMethod === method}
-                        onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                        className="radio-input"
-                      />
-                      <span>{method}</span>
-                    </label>
-                  ))}
-                </div>
-                {errors.paymentMethod && <span className="error-text">{errors.paymentMethod}</span>}
-              </div>
-
               {/* Submit Button */}
-              <div style={{ marginTop: '8px' }}>
+              <div style={{ marginTop: '12px' }}>
                 <button type="submit" disabled={isCheckingExisting} className="submit-btn">
                   {isCheckingExisting ? (
                     <>
@@ -614,7 +593,7 @@ export default function RegistrationModal({ isOpen, onClose, theme = 'light' }: 
                   ) : (
                     <>
                       <Send size={18} />
-                      <span>{formData.paymentMethod === 'UPI' ? `Get UPI QR Code (₹${getAmount()})` : 'Submit Registration'}</span>
+                      <span>Get UPI QR Code (₹{getAmount()})</span>
                     </>
                   )}
                 </button>
